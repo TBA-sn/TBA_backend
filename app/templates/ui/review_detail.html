@@ -1,0 +1,24 @@
+{% extends "ui/base.html" %}
+{% block title %}리뷰 상세{% endblock %}
+{% block content %}
+<h2>리뷰 #{{ rec.id }}</h2>
+<p><b>user_id</b>: {{ rec.user_id }} | <b>model_id</b>: {{ rec.model_id }} | <b>created_at</b>: {{ rec.created_at }}</p>
+<h3>요약</h3>
+<p>{{ rec.result.summary }}</p>
+<h3>점수</h3>
+<ul>
+  <li>global: {{ rec.result.scores.global }}</li>
+  <li>model: {{ rec.result.scores.model }}</li>
+</ul>
+<h3>카테고리</h3>
+<table>
+  <thead><tr><th>name</th><th>score</th><th>comment</th></tr></thead>
+  <tbody>
+    {% for c in rec.result.categories %}
+      <tr><td>{{ c.name }}</td><td>{{ c.score }}</td><td>{{ c.comment }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<h3>원본 코드</h3>
+<pre style="white-space:pre-wrap;border:1px solid #eee;border-radius:10px;padding:12px">{{ rec.code }}</pre>
+{% endblock %}

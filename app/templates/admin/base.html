@@ -1,0 +1,24 @@
+<!-- app/templates/admin/base.html -->
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>{% block title %}TBA Admin{% endblock %}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 24px; }
+    .nav { display:flex; gap:14px; border-bottom:1px solid #ddd; padding-bottom:10px; margin-bottom:20px; }
+    .nav a { text-decoration:none; color:#333; padding:6px 10px; border-radius:8px; }
+    .nav a.active { background:#111; color:#fff; }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    {% set p = request.url.path %}
+    <a href="/ui/reviews"    class="{{ 'active' if p.startswith('/ui/reviews') else '' }}">리뷰 목록</a>
+    <a href="/ui/review"     class="{{ 'active' if p == '/ui/review' else '' }}">리뷰 제출</a>
+    <a href="/ui/api-test"   class="{{ 'active' if p.startswith('/ui/api-test') else '' }}">API 테스트</a>
+  </nav>
+
+  {% block content %}{% endblock %}
+</body>
+</html>
