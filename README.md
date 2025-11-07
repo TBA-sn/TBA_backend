@@ -2,7 +2,7 @@
 
 ## 🧱 1️⃣ 프로젝트 클론 및 가상환경 설정
 
-```bash
+
 git clone https://github.com/TBA-sn/TBA_backend
 cd TBA_backend
 
