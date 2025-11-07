@@ -29,7 +29,7 @@ db 이름은 알아서.. 비번이랑..
 
 mysql에 접속 
 그런데 저는 datagrip이 편해서 쓴건데 
-<img width="802" height="679" alt="image" src="https://github.com/user-attachments/assets/bc121e28-c8eb-4f79-84a7-6508d274efee" />
+<img width="1596" height="1347" alt="image" src="https://github.com/user-attachments/assets/4ca86efe-ef70-485c-90da-c652b1114daf" />
 
 이렇게 설정해서 비번만 치면 되는데 음..
 use tba_db하고
