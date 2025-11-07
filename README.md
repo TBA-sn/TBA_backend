@@ -50,7 +50,8 @@ localhost:8000 들어가면 ui 뜹니다!
 curl "http://localhost:8000/auth/github/debug/mint?user_id=원하는 id“
 Api 테스트에 넣어야함
 Authorization 옵션 (토큰 직접 입력) 누르고 토큰 나온거 복붙하고 엔터 그럼 밑에 알아서
-<img width="801" height="679" alt="스크린샷 2025-11-07 오후 5 34 38" src="https://github.com/user-attachments/assets/5e552fa7-9b7c-49f9-bd47-74f0ff4522fe" />
+![TBA Banner](https://github.com/user-attachments/assets/5e552fa7-9b7c-49f9-bd47-74f0ff4522fe?raw=true)
+
 
 이런식으로 쭉 뜰겁니다!
 
