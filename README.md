@@ -20,8 +20,6 @@ DB_NAME=tba_db
 DB_USER=root
 DB_PASSWORD=000000
 
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
 GITHUB_REDIRECT=http://localhost:8000/auth/github/callback
 
 JWT_SECRET=dev-secret
