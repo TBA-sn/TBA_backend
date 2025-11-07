@@ -31,7 +31,7 @@ db 이름은 알아서.. 비번이랑..
 
 mysql에 접속 
 그런데 저는 datagrip이 편해서 쓴건데 
-<img width="803" height="680" alt="데이터 소스" src="https://github.com/user-attachments/assets/e71a9ed1-571f-43b3-993c-0a568ad7532a" />
+[[<img width="803" height="680" alt="데이터 소스" src="https://github.com/user-attachments/assets/e71a9ed1-571f-43b3-993c-0a568ad7532a" />](https://imgur.com/a/tIq4ISM)](https://imgur.com/a/tIq4ISM)
 이렇게 설정해서 비번만 치면 되는데 음..
 use tba_db하고
 1. 데이터베이스 테이블 다 drop
@@ -50,7 +50,7 @@ localhost:8000 들어가면 ui 뜹니다!
 curl "http://localhost:8000/auth/github/debug/mint?user_id=원하는 id“
 Api 테스트에 넣어야함
 Authorization 옵션 (토큰 직접 입력) 누르고 토큰 나온거 복붙하고 엔터 그럼 밑에 알아서
-![TBA Banner](https://github.com/user-attachments/assets/5e552fa7-9b7c-49f9-bd47-74f0ff4522fe?raw=true)
+![TBA Banner](https://imgur.com/a/agMVpWv.png)
 
 
 이런식으로 쭉 뜰겁니다!
