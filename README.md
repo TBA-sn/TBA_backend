@@ -39,12 +39,12 @@ use tba_db하고
    
 3. 파이썬 실행
 
-4. 명령어 치기…
+4. 명령어 치기
 ~~~
    alembic revision --autogenerate -m "init tables"    # 원하는 거 암거나
    alembic upgrade head
 ~~~
-5. 데이터베이스 새로고침 해보면 테이블 만들어져있을 거임…
+5. 데이터베이스 새로고침 해보면 테이블 만들어져 있을겁니다 안된다면 계속 해보세요,, 언젠가 생깁니다,,
 
 서버 실행
 ~~~
