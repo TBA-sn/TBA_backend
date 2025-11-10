@@ -167,3 +167,22 @@ async def api_test_submit(
             "used_authorization": bool(auth_header) or bool(access_cookie),
         },
     )
+
+@router.get("/review/{review_id}/logs")
+async def review_logs(
+    review_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    stmt = (
+        select(ActionLog)
+        .where(ActionLog.case_id == str(review_id))
+        .order_by(ActionLog.timestamp.desc())
+    )
+    logs = (await session.execute(stmt)).scalars().all()
+
+    return templates.TemplateResponse("ui/review_logs.html", {
+        "request": request,
+        "review_id": review_id,
+        "logs": logs,
+    })

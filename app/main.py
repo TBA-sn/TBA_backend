@@ -11,6 +11,7 @@ load_dotenv()
 from app.routers.v1.review import router as review_router
 from app.routers.v1.user import router as user_router
 from app.routers.ui import router as ui_router
+from app.routers.v1.action_log import router as action_log_router
 
 auth_router = None
 try:
@@ -45,6 +46,7 @@ app.add_middleware(
 )
 
 app.include_router(review_router)
+app.include_router(action_log_router)
 app.include_router(user_router)
 if auth_router:
     app.include_router(auth_router)
@@ -72,6 +74,7 @@ async def custom_http_exception_handler(request: Request, exc: HTTPException):
         return HTMLResponse("<h3>접근 권한이 없습니다.</h3>", status_code=403)
 
     return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+
 
 if __name__ == "__main__":
     import uvicorn

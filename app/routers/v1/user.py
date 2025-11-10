@@ -25,5 +25,3 @@ async def create_user(payload: UserCreate, session: AsyncSession = Depends(get_s
 async def list_users(session: AsyncSession = Depends(get_session)):
     rows = (await session.execute(select(User).order_by(User.created_at.desc()))).scalars().all()
     return rows
-
-

@@ -19,6 +19,13 @@
     {% endfor %}
   </tbody>
 </table>
+<h3>활동 로그</h3>
+<ul>
+  <li>최근 case_id: {{ rec.id }}</li>
+  
+</ul>
 <h3>원본 코드</h3>
 <pre style="white-space:pre-wrap;border:1px solid #eee;border-radius:10px;padding:12px">{{ rec.code }}</pre>
+
+  <li><a href="/ui/review/{{ rec.id }}/logs">액션 로그 전체 보기</a></li>
 {% endblock %}
