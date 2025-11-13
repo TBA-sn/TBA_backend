@@ -1,0 +1,87 @@
+name: Backend CI + Auto Deploy
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "app/**"
+      - "requirements.txt"
+      - "alembic.ini"
+      - ".github/workflows/backend-auto-deploy.yml"
+
+jobs:
+  test_and_deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) 레포 코드 가져오기
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2) Python 설치
+      - name: Set up Python
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # 3) 의존성 설치
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 4) FastAPI 앱이 최소한 문법/임포트 에러 없이 돌아가는지 체크
+      - name: Import check (compile app)
+        run: python -m compileall app
+
+      # 5) tests 폴더 있으면 pytest 실행 (없으면 스킵)
+      - name: Run tests if exists
+        run: |
+          if [ -d "tests" ]; then
+            echo "tests/ 폴더 감지됨 → pytest 실행"
+            pytest -q
+          else
+            echo "tests/ 폴더 없음 → 테스트 스킵"
+          fi
+
+      # ⬇⬇⬇ 여기까지 성공하면, 이제부터 자동 배포 시작 ⬇⬇⬇
+
+      # 6) EC2로 코드 복사
+      - name: Copy backend to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "."
+          target: ${{ secrets.EC2_APP_PATH }}
+
+      # 7) EC2에서 가상환경 세팅 + 의존성 설치 + 서버 재시작
+      - name: SSH to EC2 and restart backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ${{ secrets.EC2_APP_PATH }}
+
+            # 가상환경 세팅 (이미 있다면 생략 가능)
+            if [ ! -d ".venv" ]; then
+              python3 -m venv .venv
+            fi
+
+            source .venv/bin/activate
+
+            pip install -U pip
+            pip install -r requirements.txt
+
+            # 여기부터는 너 서버 운영 방식에 맞게 골라 쓰면 됨
+
+            # ✅ systemd로 서비스 돌리는 경우 (추천)
+            # sudo systemctl restart tba-backend.service
+
+            # ✅ 그냥 uvicorn 직접 돌리는 경우 (예시)
+            pkill -f "uvicorn app.main:app" || true
+            nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
