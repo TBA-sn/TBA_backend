@@ -1,4 +1,4 @@
-{% extends "admin/base.html" %}
+{% extends "ui/base.html" %}
 {% block title %}API 통합 테스트{% endblock %}
 
 {% block content %}
@@ -7,7 +7,7 @@
 <form method="post" action="/ui/api-test" style="display:grid;gap:12px;max-width:900px;">
   <div style="display:grid;grid-template-columns:160px 1fr;gap:8px;align-items:center;">
     <label>user_id</label>
-    <input type="text" name="user_id" placeholder="예: 3" required />
+    <input type="number" name="user_id" placeholder="예: 1" required />
   </div>
 
   <div style="display:grid;grid-template-columns:160px 1fr;gap:8px;align-items:center;">
@@ -26,9 +26,21 @@
   </div>
 
   <div style="display:grid;grid-template-columns:160px 1fr;gap:8px;">
+    <label>file_path (옵션)</label>
+    <input type="text" name="file_path" placeholder="/path/to/file.py" />
+  </div>
+
+  <div style="display:grid;grid-template-columns:160px 1fr;gap:8px;">
     <label>code</label>
     <textarea name="code" rows="8" placeholder="여기에 코드 입력" required>def add(a,b): return a+b</textarea>
   </div>
+
+  <label>criteria (쉼표로 구분)</label>
+  <input
+    type="text"
+    name="criteria"
+    value="유지보수성,가독성,확장성,유연성,간결성,재사용성,테스트 용이성"
+  />
 
   <details style="margin-top:8px;">
     <summary>Authorization 옵션 (토큰 직접 입력)</summary>
@@ -46,10 +58,6 @@
     <button type="submit" class="button">/v1/reviews/request 호출</button>
     <a class="button" href="/ui/api-test">초기화</a>
   </div>
-
-  <label>criteria (쉼표로 구분)</label>
-<input type="text" name="criteria" value="readability,efficiency,consistency" />
-
 </form>
 
 {% if resp is not none %}
@@ -60,8 +68,6 @@
 
   <h3>보낸 페이로드</h3>
   <pre style="background:#222;color:#ddd;padding:10px;border-radius:8px;overflow:auto;white-space:pre-wrap;">{{ sent_pretty | safe }}</pre>
-    <h3>LLM 전송 바디</h3>
-<pre style="background:#111;color:#0f0;padding:10px;border-radius:8px;overflow:auto;">{{ llm_payload_pretty }}</pre>
 
   <p style="color:#666;">Authorization 사용: {{ '예' if used_authorization else '아니오' }}</p>
 {% endif %}

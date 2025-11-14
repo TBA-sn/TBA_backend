@@ -8,6 +8,10 @@ from pydantic import BaseSettings
 from app.utils.database import get_session
 from app.models.user import User
 from app.services.auth import create_jwt
+from datetime import datetime, timezone
+from typing import Any, Dict
+from pydantic import BaseModel
+from app.schemas.common import Meta 
 
 class Settings(BaseSettings):
     GITHUB_CLIENT_ID: str
@@ -79,3 +83,52 @@ async def gh_callback(code: str, session: AsyncSession = Depends(get_session)):
     resp = RedirectResponse(url="/ui/reviews", status_code=303)
     resp.set_cookie("access_token", token, httponly=True, samesite="lax", secure=False, max_age=60*60*24*7, path="/")
     return resp
+
+class DebugMintBody(BaseModel):
+    access_token: str
+    user: Dict[str, Any]  # { "id": 1, "nickname": "suajeon", "created_at": ... }
+
+
+class DebugMintResponse(BaseModel):
+    meta: Meta
+    body: DebugMintBody
+
+
+@router.get("/auth/github/debug/mint", response_model=DebugMintResponse)
+async def debug_mint(user_id: int, session: AsyncSession = Depends(get_session)):
+    # 1) DB에서 user 조회
+    stmt = select(User).where(User.id == user_id)
+    result = await session.execute(stmt)
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 2) JWT 발급 (기존에 쓰던 util 함수 재사용)
+    access_token = create_access_token(user_id=user.id)
+
+    now = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)  # 예시 값 맞춤
+    meta = Meta(
+        id=None,
+        version="v1",
+        actor="server",
+        identity=None,
+        model=None,
+        analysis=None,
+        progress={"status": "done", "next_step": None},
+        result={"result_ref": None, "error_message": None},
+        audit={
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+
+    body = DebugMintBody(
+        access_token=access_token,
+        user={
+            "id": user.id,
+            "nickname": user.nickname,
+            "created_at": now.isoformat().replace("+00:00", "Z"),
+        },
+    )
+
+    return DebugMintResponse(meta=meta, body=body)

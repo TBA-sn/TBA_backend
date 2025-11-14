@@ -12,6 +12,8 @@ from app.routers.v1.review import router as review_router
 from app.routers.v1.user import router as user_router
 from app.routers.ui import router as ui_router
 from app.routers.v1.action_log import router as action_log_router
+from app.routers.llm import router as llm_router
+from app.routers.ws import router as ws_router 
 
 auth_router = None
 try:
@@ -44,9 +46,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+app.include_router(llm_router)
 app.include_router(review_router)
 app.include_router(action_log_router)
+app.include_router(ws_router)
 app.include_router(user_router)
 if auth_router:
     app.include_router(auth_router)

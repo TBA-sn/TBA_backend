@@ -1,25 +1,45 @@
 {% extends "ui/base.html" %}
 {% block title %}리뷰 목록{% endblock %}
+
 {% block content %}
 <h2>리뷰 목록</h2>
+
 <form method="get" action="" style="display:flex;gap:8px;align-items:center;margin:12px 0;">
   <input name="user_id" placeholder="filter by user_id" value="{{ user_id or '' }}" />
   <input type="submit" value="검색" />
 </form>
+
 <table>
   <thead>
-    <tr><th>ID</th><th>user_id</th><th>model_id</th><th>global/model</th><th>created_at</th><th></th></tr>
+    <tr>
+      <th>ID</th>
+      <th>user_id</th>
+      <th>model</th>
+      <th>global/model</th>
+      <th>status</th>
+      <th>created_at</th>
+      <th></th>
+    </tr>
   </thead>
   <tbody>
   {% for r in rows %}
     <tr>
       <td>{{ r.id }}</td>
       <td>{{ r.user_id }}</td>
-      <td>{{ r.model_id }}</td>
-      <td>{{ r.result.scores.global }}/{{ r.result.scores.model }}</td>
+      <td>{{ r.model }}</td>
+      <td>
+        {% if r.scores %}
+          {{ r.scores.global_score }}/{{ r.scores.model_score }}
+        {% else %}
+          -
+        {% endif %}
+      </td>
+      <td>{{ r.status }}</td>
       <td>{{ r.created_at }}</td>
       <td><a class="button" href="/ui/review/{{ r.id }}">보기</a></td>
     </tr>
+  {% else %}
+    <tr><td colspan="7" style="text-align:center;">리뷰가 없습니다</td></tr>
   {% endfor %}
   </tbody>
 </table>

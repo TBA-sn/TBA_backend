@@ -9,14 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.database import get_session
 from app.models.action_log import ActionLog
 from app.schemas.action_log import ActionLogOut, ActionLogList
-from app.routers.auth import get_current_user_id  # 인증만 요구(권한 세분화는 추후)
+from app.routers.auth import get_current_user_id
 
 router = APIRouter(prefix="/v1", tags=["action-log"])
 
 @router.get("/action-logs", response_model=ActionLogList, summary="액션 로그 목록")
 async def list_action_logs(
     session: AsyncSession = Depends(get_session),
-    _uid: int = Depends(get_current_user_id),  # 인증만 통과시키기
+    _uid: int = Depends(get_current_user_id),
     user_id: Optional[int] = Query(None, description="해당 유저의 로그만"),
     case_id: Optional[str] = Query(None, description="보통 review id 문자열"),
     action: Optional[str] = Query(None, description="예: REVIEW_REQUEST"),

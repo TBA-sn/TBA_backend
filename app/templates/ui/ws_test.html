@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <pre id="log"></pre>
+    <script>
+      const log = (msg) => {
+        document.getElementById("log").textContent += msg + "\n";
+      };
+
+      const ws = new WebSocket("ws://localhost:8000/ws/reviews/1");
+      ws.onopen = () => log("✅ WS connected");
+      ws.onmessage = (event) => log("📩 " + event.data);
+      ws.onclose = () => log("❌ WS closed");
+    </script>
+  </body>
+</html>

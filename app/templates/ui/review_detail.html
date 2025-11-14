@@ -1,31 +1,58 @@
 {% extends "ui/base.html" %}
 {% block title %}리뷰 상세{% endblock %}
+
 {% block content %}
 <h2>리뷰 #{{ rec.id }}</h2>
-<p><b>user_id</b>: {{ rec.user_id }} | <b>model_id</b>: {{ rec.model_id }} | <b>created_at</b>: {{ rec.created_at }}</p>
+
+<p>
+  <b>user_id</b>: {{ rec.user_id }}
+  | <b>model</b>: {{ rec.model }}
+  | <b>trigger</b>: {{ rec.trigger }}
+  | <b>status</b>: {{ rec.status }}
+  | <b>created_at</b>: {{ rec.created_at }}
+</p>
+
 <h3>요약</h3>
-<p>{{ rec.result.summary }}</p>
+<p>{{ rec.summary or '요약 없음' }}</p>
+
 <h3>점수</h3>
 <ul>
-  <li>global: {{ rec.result.scores.global }}</li>
-  <li>model: {{ rec.result.scores.model }}</li>
+  <li>global_score: {{ rec.scores.global_score if rec.scores else '-' }}</li>
+  <li>model_score: {{ rec.scores.model_score if rec.scores else '-' }}</li>
+  <li>efficiency_index: {{ rec.scores.efficiency_index if rec.scores else '-' }}</li>
 </ul>
+
 <h3>카테고리</h3>
 <table>
-  <thead><tr><th>name</th><th>score</th><th>comment</th></tr></thead>
+  <thead>
+    <tr><th>name</th><th>score</th><th>comment</th></tr>
+  </thead>
   <tbody>
-    {% for c in rec.result.categories %}
-      <tr><td>{{ c.name }}</td><td>{{ c.score }}</td><td>{{ c.comment }}</td></tr>
+    {% for c in rec.categories or [] %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td>{{ c.score }}</td>
+        <td>{{ c.comment }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="3" style="text-align:center;">카테고리 없음</td></tr>
     {% endfor %}
   </tbody>
 </table>
-<h3>활동 로그</h3>
-<ul>
-  <li>최근 case_id: {{ rec.id }}</li>
-  
-</ul>
-<h3>원본 코드</h3>
-<pre style="white-space:pre-wrap;border:1px solid #eee;border-radius:10px;padding:12px">{{ rec.code }}</pre>
 
-  <li><a href="/ui/review/{{ rec.id }}/logs">액션 로그 전체 보기</a></li>
+<h3>메타 정보</h3>
+<ul>
+  <li>request_hash: <code>{{ rec.request_hash }}</code></li>
+  <li>code_fingerprint: <code>{{ rec.code_fingerprint }}</code></li>
+  {% if rec.result_ref %}
+    <li>result_ref: {{ rec.result_ref }}</li>
+  {% endif %}
+  {% if rec.error_message %}
+    <li style="color:#c00;">error_message: {{ rec.error_message }}</li>
+  {% endif %}
+</ul>
+
+<p style="margin-top:16px;">
+  <a href="/ui/review/{{ rec.id }}/logs">액션 로그 보기</a>
+</p>
 {% endblock %}

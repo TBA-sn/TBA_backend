@@ -1,12 +1,13 @@
 {% extends "ui/base.html" %}
 {% block title %}리뷰 작성{% endblock %}
+
 {% block content %}
 <h2>리뷰 요청</h2>
 <form method="post" action="/ui/review">
   <div class="row">
     <div class="col">
       <label>user_id</label>
-      <input name="user_id" placeholder="abc-123" required />
+      <input name="user_id" type="number" placeholder="1" required />
     </div>
     <div class="col">
       <label>model_id</label>

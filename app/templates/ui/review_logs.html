@@ -1,26 +1,30 @@
 {% extends "ui/base.html" %}
 {% block title %}리뷰 #{{ review_id }} 로그{% endblock %}
+
 {% block content %}
 <h2>리뷰 #{{ review_id }} - 액션 로그</h2>
 <a href="/ui/review/{{ review_id }}">⬅ 리뷰로 돌아가기</a>
+
 <table>
   <thead>
     <tr>
-      <th>log_id</th>
+      <th>id</th>
       <th>user_id</th>
-      <th>case_id</th>
-      <th>action</th>
+      <th>event_name</th>
       <th>timestamp</th>
+      <th>properties</th>
     </tr>
   </thead>
   <tbody>
     {% for log in logs %}
     <tr>
-      <td>{{ log.log_id }}</td>
+      <td>{{ log.id }}</td>
       <td>{{ log.user_id }}</td>
-      <td>{{ log.case_id }}</td>
-      <td>{{ log.action }}</td>
+      <td>{{ log.event_name }}</td>
       <td>{{ log.timestamp }}</td>
+      <td>
+        <pre style="white-space:pre-wrap;margin:0;">{{ log.properties | tojson(indent=2) }}</pre>
+      </td>
     </tr>
     {% else %}
     <tr><td colspan="5" style="text-align:center;">로그가 없습니다</td></tr>

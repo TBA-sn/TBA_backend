@@ -1,6 +1,7 @@
 # app/schemas/action_log.py
 from datetime import datetime
 from pydantic import BaseModel
+from typing import Optional
 
 class ActionLogOut(BaseModel):
     id: int
@@ -9,7 +10,7 @@ class ActionLogOut(BaseModel):
     case_id: str
     action: str
     timestamp: datetime
-
+    report_id: Optional[int]
     class Config:
         from_attributes = True  # SQLAlchemy 모델 -> Pydantic 변환
 
