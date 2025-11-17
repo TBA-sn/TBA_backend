@@ -1,0 +1,29 @@
+{% extends "ui/base.html" %}
+{% block title %}WS Debug{% endblock %}
+
+{% block content %}
+<h2>WebSocket Debug</h2>
+<p>서버에서 쏘는 이벤트가 아래 로그로 실시간 찍힙니다.</p>
+<pre id="log" style="background:#111;color:#0f0;padding:10px;border-radius:8px;height:400px;overflow:auto;"></pre>
+
+<script>
+  const logEl = document.getElementById("log");
+  const log = (msg) => {
+    logEl.textContent += msg + "\n";
+    logEl.scrollTop = logEl.scrollHeight;
+  };
+
+  const ws = new WebSocket("ws://localhost:8000/ws/debug");
+
+  ws.onopen = () => log("✅ WS connected");
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      log("📩 " + JSON.stringify(data, null, 2));
+    } catch {
+      log("📩 " + event.data);
+    }
+  };
+  ws.onclose = () => log("❌ WS closed");
+</script>
+{% endblock %}

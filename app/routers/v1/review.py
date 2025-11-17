@@ -1,9 +1,9 @@
 # app/routers/v1/review.py
 from uuid import uuid4
-import hashlib 
 from datetime import datetime, timezone
+from hashlib import sha256
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, and_
 
@@ -29,27 +29,19 @@ from app.schemas.review import (
     ReviewRequestResponse,
     ReviewRequestResponseBody,
     ReviewListRequest,
-    ReviewListResponse,
     ReviewListResponseBody,
-    ReviewListItem,
-    ReviewDetailResponse,
     ReviewDetailResponseBody,
     ReviewDetailCategory,
     ReviewResultMeta,
+    ReviewCheckResponseBody,
+    ReviewResultRequest,
 )
 from app.models.review import Review
 from app.models.action_log import ActionLog
 from app.services.llm_client import review_code
 from app.routers.auth import get_current_user_id
-from app.routers.ws import ws_manager  # ws_manager import
-from app.schemas.review import (
-    ReviewCheckRequest,
-    ReviewCheckResponse,
-    ReviewCheckResponseBody,
-)
-from app.schemas.common import Meta
-from app.schemas.review import ReviewResultRequest
-from fastapi import Path
+from app.routers.ws_debug import ws_manager  # WebSocket manager
+
 router = APIRouter(prefix="/v1/reviews", tags=["review"])
 
 
@@ -70,15 +62,32 @@ def normalize_scores(llm_scores: dict) -> dict:
 
 def make_request_hash(user_id: int, code: str, language: str) -> str:
     raw = f"{user_id}:{language}:{code}"
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return sha256(raw.encode("utf-8")).hexdigest()
 
 
 def make_code_fingerprint(code: str) -> str:
-    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+    return sha256(code.encode("utf-8")).hexdigest()
+
+
+async def ws_trace(event: str, step: int | None = None, payload: dict | None = None):
+    """
+    WebSocket 디버그용 공통 헬퍼.
+    ws_debug.ws_manager.broadcast(message: dict)를 호출한다고 가정.
+    """
+    if not ws_manager:
+        return
+
+    message = {
+        "event": event,
+        "step": step,
+        "payload": payload or {},
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+    await ws_manager.broadcast(message)
 
 
 # ======================================================================
-# 1) 리뷰 생성 요청  (POST /v1/reviews/request)
+# 1) 리뷰 생성 요청  (POST /v1/reviews/request)  - 다이어그램 Step 2
 # ======================================================================
 
 @router.post("/request", response_model=ReviewRequestResponse)
@@ -88,36 +97,198 @@ async def request_review(
 ):
     body = payload.body
 
-    # 코드 fingerprint
-    code_fingerprint = sha256(body.snippet.code.encode("utf-8")).hexdigest()
+    # -----------------------------
+    # 0. 공통 값 파싱
+    # -----------------------------
+    code = body.snippet.code
+    language = body.snippet.language
+    file_path = body.snippet.file_path
 
-    # Review 레코드 생성
+    code_fingerprint = sha256(code.encode("utf-8")).hexdigest()
+
+    # model 정보는 body가 아니라 meta.model.name 에서 꺼내자
+    model_name: str | None = None
+    if payload.meta and getattr(payload.meta, "model", None):
+        m = payload.meta.model
+        if isinstance(m, dict):
+            model_name = m.get("name")
+        else:
+            model_name = getattr(m, "name", None)
+
+    # 분석 관점(aspects)도 meta.analysis에서 꺼냄
+    aspects: list[str] = []
+    if payload.meta and getattr(payload.meta, "analysis", None):
+        a = payload.meta.analysis
+        if isinstance(a, dict):
+            aspects = a.get("aspects") or []
+        else:
+            aspects = getattr(a, "aspects", []) or []
+
+    # WS 디버그: 리뷰 생성 요청 들어옴 (Step 2)
+    await ws_trace(
+        event="review_request_received",
+        step=2,
+        payload={
+            "user_id": body.user_id,
+            "language": language,
+            "model": model_name,
+            "has_code": bool(code),
+        },
+    )
+
+    # -----------------------------
+    # 1. Review 레코드 먼저 생성 (status: processing)
+    # -----------------------------
     review = Review(
         user_id=body.user_id,
-        language=body.snippet.language,
-        file_path=body.snippet.file_path,
-        code=body.snippet.code,
+        language=language,
+        file_path=file_path,
+        code=code,
         code_fingerprint=code_fingerprint,
         trigger=body.trigger,
-        status="pending",
-        global_score=None,
-        model_score=None,
-        efficiency_index=None,
+        status="processing",
     )
     session.add(review)
-    await session.flush()  # review.id 생성
+    await session.flush()  # review.id 확보
 
-    # TODO: 여기서 LLM worker 큐에 job 넣기 등
+    # -----------------------------
+    # 2. LLM 요청 만들고 호출
+    #    (여기서 LLM 죽으면 llm_client에서 더미로 폴백)
+    # -----------------------------
+    llm_req = LLMRequest(
+        code=code,
+        language=language,
+        criteria=aspects,
+        model=model_name,
+    )
 
-    now = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    llm_resp = await review_code(llm_req)
+
+    # -----------------------------
+    # 3. LLM(또는 더미) 결과를 Review에 저장
+    # -----------------------------
+    g = llm_resp.scores.get("global")
+    m = llm_resp.scores.get("model")
+    eff = (m / g) if g else None
+
+    # 숫자 컬럼 채우기 (기본)
+    if hasattr(review, "global_score"):
+        review.global_score = g
+    if hasattr(review, "model_score"):
+        review.model_score = m
+    if hasattr(review, "efficiency_index"):
+        review.efficiency_index = eff
+
+    # scores JSON 컬럼이 있으면 같이 채우기
+    if hasattr(review, "scores"):
+        review.scores = {
+            "global_score": g,
+            "model_score": m,
+            "efficiency_index": eff,
+        }
+
+    review.summary = llm_resp.summary
+
+    # categories JSON 컬럼이 있으면 채우기
+    if hasattr(review, "categories"):
+        try:
+            review.categories = [c.dict() for c in llm_resp.categories]
+        except AttributeError:
+            # pydantic v2면 model_dump 사용 가능, 근데 타입 맞추기 귀찮으면 그냥 패스
+            review.categories = [
+                {
+                    "name": getattr(c, "name", ""),
+                    "score": getattr(c, "score", 0),
+                    "comment": getattr(c, "comment", ""),
+                }
+                for c in llm_resp.categories
+            ]
+
+    review.status = "done"
+
+    await session.commit()
+
+    # -----------------------------
+    # 4. 응답 meta/body 만들기
+    # -----------------------------
+    resp_meta = payload.meta
+    if resp_meta:
+        if isinstance(resp_meta, Meta):
+            resp_meta.progress = {"status": "done", "next_step": None}
+        else:
+            # dict인 경우 대비
+            resp_meta["progress"] = {"status": "done", "next_step": None}
+
+    resp_body = ReviewRequestResponseBody(
+        review_id=review.id,
+        status=review.status,
+    )
+
+    # VSCode/WEB 응답 직전 WebSocket (Step 6 느낌)
+    await ws_trace(
+        event="analysis_response_returned",
+        step=6,
+        payload={
+            "review_id": review.id,
+            "user_id": review.user_id,
+            "status": review.status,
+            "global_score": g,
+            "model_score": m,
+        },
+    )
+
+    return ReviewRequestResponse(meta=resp_meta, body=resp_body)
+
+
+# ======================================================================
+# 2) 리뷰 신규성 확인  (POST /v1/reviews/check)  - 다이어그램 Step 1
+# ======================================================================
+
+@router.post("/check", response_model=ReviewCheckResponse)
+async def check_review(
+    payload: ReviewCheckRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    문서의 '리뷰 신규성 확인'에 해당.
+    user_id + code_fingerprint 기준으로 최근 리뷰 존재 여부 확인.
+    """
+    body = payload.body
+
+    # code fingerprint: sha256(code)
+    code_fingerprint = make_code_fingerprint(body.code)
+
+    # 최근 리뷰 1건 찾아보기 (user + fingerprint 기준)
+    stmt = (
+        select(Review)
+        .where(
+            Review.user_id == body.user_id,
+            Review.code_fingerprint == code_fingerprint,
+        )
+        .order_by(desc(Review.created_at))
+        .limit(1)
+    )
+    result = await session.execute(stmt)
+    last_review: Review | None = result.scalar_one_or_none()
+
+    if last_review is None:
+        is_new = True
+        reason = "no_recent_review"
+        last_review_id = None
+    else:
+        is_new = False
+        reason = "recent_review"
+        last_review_id = last_review.id
+
+    now = datetime(2025, 11, 12, 8, 0, 1, tzinfo=timezone.utc)
     resp_meta = Meta(
-        id=review.id,
+        id=None,
         version="v1",
         actor="server",
-        identity=payload.meta.identity,
-        model=payload.meta.model,
-        analysis=payload.meta.analysis,
-        progress={"status": "pending", "next_step": 1},
+        identity=None,
+        model=None,
+        analysis=None,
+        progress={"status": "done", "next_step": None},
         result=None,
         audit={
             "created_at": now,
@@ -125,56 +296,31 @@ async def request_review(
         },
     )
 
-    resp_body = ReviewRequestResponseBody(
-        review_id=review.id,
-        status=review.status,
+    resp_body = ReviewCheckResponseBody(
+        is_new=is_new,
+        reason=reason,
+        last_review_id=last_review_id,
     )
 
-    await session.commit()
-
-    return ReviewRequestResponse(meta=resp_meta, body=resp_body)
-
-# ======================================================================
-# 2) 리뷰 신규성 확인  (POST /v1/reviews/check)
-# ======================================================================
-
-@router.post("/check", response_model=ReviewCheckResponse)
-async def check_review(
-    req: ReviewCheckRequest,
-    session: AsyncSession = Depends(get_session),
-):
-    """
-    문서의 '리뷰 신규성 확인'에 해당.
-    request_hash 기준으로 동일 요청 여부 확인.
-    """
-    request_hash = make_request_hash(req.user_id, req.code, req.language)
-
-    stmt = (
-        select(Review)
-        .where(Review.request_hash == request_hash)
-        .order_by(Review.created_at.desc())
-        .limit(1)
+    # WS 디버그: 신규성 체크 (Step 1)
+    await ws_trace(
+        event="review_new_check",
+        step=1,
+        payload={
+            "user_id": body.user_id,
+            "language": body.language,
+            "is_new": is_new,
+            "reason": reason,
+            "last_review_id": last_review_id,
+        },
     )
-    rec = (await session.execute(stmt)).scalar_one_or_none()
 
-    if rec is None:
-        return ReviewCheckResponse(
-            is_new=True,
-            reason="no_recent_review",
-            last_review_id=None,
-        )
-
-    # 같은 해시 == 같은 코드/언어 조합
-    return ReviewCheckResponse(
-        is_new=False,
-        reason="same_code",
-        last_review_id=rec.id,
-    )
+    return ReviewCheckResponse(meta=resp_meta, body=resp_body)
 
 
 # ======================================================================
 # 3) 분석 결과 패치 저장  (PATCH /v1/reviews/{review_id}/result)
-#   - 문서의 "분석 정보 저장"에 해당
+#    - 문서의 "분석 정보 저장" / 다이어그램 Step 5
 # ======================================================================
 
 @router.patch("/{review_id}/result")
@@ -191,7 +337,7 @@ async def save_review_result(
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
 
-    # Review 테이블 업데이트 (필요하면 review_result 별도 테이블 둬도 됨)
+    # Review 테이블 업데이트
     review.global_score = record.scores.global_score
     review.model_score = record.scores.model_score
     review.efficiency_index = record.scores.efficiency_index
@@ -200,9 +346,21 @@ async def save_review_result(
 
     await session.commit()
 
+    # WS 디버그: 분석 결과 저장 (Step 5)
+    await ws_trace(
+        event="analysis_saved_to_db",
+        step=5,
+        payload={
+            "review_id": review_id,
+            "status": review.status,
+        },
+    )
+
     return {"status": "ok"}
+
+
 # ======================================================================
-# 4) 리뷰 목록 조회  (GET /v1/reviews)
+# 4) 리뷰 목록 조회  (GET /v1/reviews)  - 다이어그램 Step 6 (분석 정보 제공)
 # ======================================================================
 
 @router.get("", response_model=ReviewListResponse)
@@ -250,11 +408,26 @@ async def list_reviews(
         actor="server",
     )
 
+    # WS 디버그: 목록 조회 (Step 6)
+    await ws_trace(
+        event="review_list_provided",
+        step=6,
+        payload={
+            "user_id": body.user_id,
+            "page": page,
+            "item_count": len(items),
+        },
+    )
+
     return ReviewListResponse(
         meta=meta,
         response=ReviewListResponseBody(items=items),
     )
 
+
+# ======================================================================
+# 5) 리뷰 상세 조회  (GET /v1/reviews/{review_id})  - 다이어그램 Step 6
+# ======================================================================
 
 @router.get("/{review_id}", response_model=ReviewDetailResponse)
 async def get_review_detail(
@@ -263,7 +436,6 @@ async def get_review_detail(
     correlation_id: str,
     session: AsyncSession = Depends(get_session),
 ):
-    # NOTE: 여기선 meta를 query param으로 받게 예시. 필요하면 Request body로 바꿔도 됨.
     stmt = select(Review).where(Review.id == review_id)
     result = await session.execute(stmt)
     review: Review | None = result.scalar_one_or_none()
@@ -292,7 +464,19 @@ async def get_review_detail(
         categories=categories,
     )
 
+    # WS 디버그: 상세 조회 (Step 6)
+    await ws_trace(
+        event="review_detail_provided",
+        step=6,
+        payload={
+            "review_id": review_id,
+            "status": review.status,
+        },
+    )
+
     return ReviewDetailResponse(meta=meta, response=body)
+
+
 # ======================================================================
 # 6) 삭제 / 메트릭스 (문서 9, 10, 11쪽 대응)
 # ======================================================================
@@ -328,6 +512,18 @@ async def delete_reviews(
             await session.delete(r)
 
     await session.commit()
+
+    # WS 디버그: 리뷰 삭제 이벤트
+    await ws_trace(
+        event="review_deleted",
+        step=None,
+        payload={
+            "user_id": req.user_id,
+            "deleted": deleted,
+            "scope": req.scope,
+            "review_id": req.review_id,
+        },
+    )
 
     return ReviewDeleteResponse(
         meta=body.meta,
@@ -365,64 +561,16 @@ async def review_metrics(
         for r in rows
     ]
 
+    await ws_trace(
+        event="review_metrics_queried",
+        step=None,
+        payload={
+            "user_id": req.user_id,
+            "points": len(series),
+        },
+    )
+
     return MetricsResponse(
         meta=body.meta,
         response={"series": series},
     )
-@router.post("/check", response_model=ReviewCheckResponse)
-async def check_review_newness(
-    payload: ReviewCheckRequest,
-    session: AsyncSession = Depends(get_session),
-):
-    body = payload.body
-
-    # code fingerprint 예시: sha256(code)
-    code_fingerprint = sha256(body.code.encode("utf-8")).hexdigest()
-
-    # 최근 리뷰 1건 찾아보기 (user + fingerprint 기준)
-    stmt = (
-        select(Review)
-        .where(
-            Review.user_id == body.user_id,
-            Review.code_fingerprint == code_fingerprint,
-        )
-        .order_by(desc(Review.created_at))
-        .limit(1)
-    )
-    result = await session.execute(stmt)
-    last_review: Review | None = result.scalar_one_or_none()
-
-    if last_review is None:
-        is_new = True
-        reason = "no_recent_review"
-        last_review_id = None
-    else:
-        # 여기서 "최근" 기준(예: 1시간/하루/etc) 정해서 reason 바꿔도 됨
-        is_new = False
-        reason = "recent_review"
-        last_review_id = last_review.id
-
-    now = datetime(2025, 11, 12, 8, 0, 1, tzinfo=timezone.utc)
-    resp_meta = Meta(
-        id=None,
-        version="v1",
-        actor="server",
-        identity=None,
-        model=None,
-        analysis=None,
-        progress={"status": "done", "next_step": None},
-        result=None,
-        audit={
-            "created_at": now,
-            "updated_at": now,
-        },
-    )
-
-    resp_body = ReviewCheckResponseBody(
-        is_new=is_new,
-        reason=reason,
-        last_review_id=last_review_id,
-    )
-
-    return ReviewCheckResponse(meta=resp_meta, body=resp_body)
-

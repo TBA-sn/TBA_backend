@@ -44,6 +44,10 @@ def build_code_request_payload(
     aspects: List[str],
     file_path: str | None = None,
 ) -> dict:
+    """
+    POST /v1/reviews/request 에 맞는 Request Body 생성
+    -> ReviewRequest 스키마: { "meta": {...}, "body": {...} }
+    """
     now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
     meta = {
@@ -51,29 +55,37 @@ def build_code_request_payload(
         "ts": now,
         "correlation_id": str(uuid4()),
         "actor": "web",
+        "identity": None,
+        "model": {
+            "name": model_id,
+        },
+        "analysis": {
+            "aspects": aspects,
+            "total_steps": 6,
+        },
+        "progress": {"status": "pending", "next_step": 1},
+        "result": None,
+        "audit": None,
     }
 
-    request = {
+    body = {
         "user_id": user_id,
         "snippet": {
             "code": code,
             "language": language,
             "file_path": file_path or "",
         },
-        "detection": {
-            "model_detected": model_id,
-            "confidence": 1.0,
-        },
-        "evaluation": {
-            "aspects": aspects,
-            "mode": "sync",
-        },
         "trigger": trigger,
-        "model": model_id,  # 🔥 여기 추가 — /v1/reviews/request 스키마의 model 필드
+        "model": model_id,
     }
 
-    return {"meta": meta, "request": request}
+    # ✅ ReviewRequest(meta=..., body=...) 구조
+    return {"meta": meta, "body": body}
 
+
+# =====================================================================================
+# 리뷰 폼
+# =====================================================================================
 
 @router.get("/review")
 async def review_form(request: Request):
@@ -90,6 +102,7 @@ async def review_submit(
     trigger: str = Form(...),
     code: str = Form(...),
 ):
+    # 쿠키에 user_id 있으면 그것 우선 사용
     try:
         uid = get_current_user_id_from_cookie(request)
     except Exception:
@@ -114,15 +127,23 @@ async def review_submit(
         res = await client.post(url, json=payload)
 
     if res.status_code != 200:
+        # 디버깅 필요하면 여기서 res.text 찍어봐도 됨
         return RedirectResponse(url="/ui/reviews", status_code=303)
 
     body = res.json()
-    review_id = body.get("review_id")
+    # ⬅️ ReviewRequestResponse(meta=..., body=...) 형태라 여기서 꺼내야 함
+    resp_body = body.get("body") or {}
+    review_id = resp_body.get("review_id")
+
     if not review_id:
         return RedirectResponse(url="/ui/reviews", status_code=303)
 
     return RedirectResponse(url=f"/ui/review/{review_id}", status_code=303)
 
+
+# =====================================================================================
+# 리뷰 상세 / 리스트
+# =====================================================================================
 
 @router.get("/review/{review_id}")
 async def review_detail(
@@ -157,6 +178,10 @@ async def review_list(
         {"request": request, "rows": rows, "user_id": user_id},
     )
 
+
+# =====================================================================================
+# API 테스트 화면 (/ui/api-test)
+# =====================================================================================
 
 @router.get("/api-test")
 async def api_test_form(request: Request):
@@ -251,6 +276,10 @@ async def api_test_submit(
     )
 
 
+# =====================================================================================
+# 리뷰 로그
+# =====================================================================================
+
 @router.get("/review/{review_id}/logs")
 async def review_logs(
     review_id: int,
@@ -268,3 +297,7 @@ async def review_logs(
         "ui/review_logs.html",
         {"request": request, "review_id": review_id, "logs": logs},
     )
+
+@router.get("/ws-debug")
+async def ws_debug_page(request: Request):
+    return templates.TemplateResponse("ui/ws_debug.html", {"request": request})
