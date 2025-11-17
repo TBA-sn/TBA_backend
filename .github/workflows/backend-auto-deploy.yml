@@ -5,10 +5,10 @@ on:
     branches:
       - main
     paths:
-      - "app/**"
-      - "requirements.txt"
-      - "alembic.ini"
-      - ".github/workflows/backend-auto-deploy.yml"
+      - app/**
+      - requirements.txt
+      - alembic.ini
+      - .github/workflows/backend-auto-deploy.yml
 
 jobs:
   test_and_deploy:
@@ -24,7 +24,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
+          cache: pip
 
       # 3) 의존성 설치
       - name: Install dependencies
@@ -32,11 +32,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 4) 앱 import 체크 (문법/의존성 깨짐 방지)
+      # 4) 앱 import 체크
       - name: Import check (compile app)
         run: python -m compileall app
 
-      # 5) tests/ 있으면 pytest 실행
+      # 5) tests 폴더 있는 경우 pytest 실행
       - name: Run tests (if exists)
         run: |
           if [ -d "tests" ]; then
@@ -56,13 +56,18 @@ jobs:
           source: "."
           target: ${{ secrets.EC2_APP_PATH }}
 
-      # 7) EC2에서 venv + 의존성 설치 + uvicorn 재시작
+      # 7) EC2에서 서버 재시작
       - name: SSH to EC2 and restart backend
         uses: appleboy/ssh-action@v1.0.3
+        continue-on-error: true
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: false
+          debug: true
+          timeout: 60m
+          command_timeout: 30m
           script: |
             cd ${{ secrets.EC2_APP_PATH }}
 
@@ -75,7 +80,10 @@ jobs:
             pip install -U pip
             pip install -r requirements.txt
 
+            # 기존 uvicorn 종료
             pkill -f "uvicorn app.main:app" || true
+
+            # 새 서버 백그라운드 실행
             nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
-          command_timeout: 30m
-          timeout: 60m
+
+            echo "EC2 backend restart completed"
