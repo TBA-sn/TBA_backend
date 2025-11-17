@@ -1,45 +1,52 @@
-name: 깃허브 액션 - 서버에 자동으로 올리기
+name: Backend Auto Deploy
 
 on:
   push:
     branches:
       - main
     paths:
-      - app/**
-      - requirements.txt
-      - alembic.ini
-      - .github/workflows/backend-auto-deploy.yml
+      - "app/**"
+      - "requirements.txt"
+      - "alembic.ini"
+      - ".github/workflows/backend-auto-deploy.yml"
 
 jobs:
   test_and_deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # 1) 레포 코드 가져오기
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2) 파이썬 셋업
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
+          cache: "pip"
 
+      # 3) 의존성 설치
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Import check
+      # 4) 앱 import 체크 (문법/의존성 깨짐 방지)
+      - name: Import check (compile app)
         run: python -m compileall app
 
-      - name: Run tests
+      # 5) tests/ 있으면 pytest 실행
+      - name: Run tests (if exists)
         run: |
           if [ -d "tests" ]; then
+            echo "tests/ 폴더 감지됨 → pytest 실행"
             pytest -q
           else
-            echo "No tests found, skipping"
+            echo "tests/ 폴더 없음 → 테스트 스킵"
           fi
 
+      # 6) EC2로 코드 복사
       - name: Copy backend to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -49,6 +56,7 @@ jobs:
           source: "."
           target: ${{ secrets.EC2_APP_PATH }}
 
+      # 7) EC2에서 venv + 의존성 설치 + uvicorn 재시작
       - name: SSH to EC2 and restart backend
         uses: appleboy/ssh-action@v1.0.3
         with:
