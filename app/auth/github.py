@@ -86,7 +86,7 @@ async def gh_callback(code: str, session: AsyncSession = Depends(get_session)):
 
 class DebugMintBody(BaseModel):
     access_token: str
-    user: Dict[str, Any]  # { "id": 1, "nickname": "suajeon", "created_at": ... }
+    user: Dict[str, Any]
 
 
 class DebugMintResponse(BaseModel):
@@ -96,17 +96,15 @@ class DebugMintResponse(BaseModel):
 
 @router.get("/auth/github/debug/mint", response_model=DebugMintResponse)
 async def debug_mint(user_id: int, session: AsyncSession = Depends(get_session)):
-    # 1) DB에서 user 조회
     stmt = select(User).where(User.id == user_id)
     result = await session.execute(stmt)
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # 2) JWT 발급 (기존에 쓰던 util 함수 재사용)
     access_token = create_access_token(user_id=user.id)
 
-    now = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)  # 예시 값 맞춤
+    now = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
     meta = Meta(
         id=None,
         version="v1",

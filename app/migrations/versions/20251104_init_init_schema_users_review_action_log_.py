@@ -1,16 +1,13 @@
-# migrations/versions/20251104_init.py
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import mysql
 
-# revision identifiers, used by Alembic.
 revision = "20251104_init"
 down_revision = None
 branch_labels = None
 depends_on = None
 
 def upgrade():
-    # === users ===
     op.create_table(
         "users",
         sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
@@ -24,16 +21,15 @@ def upgrade():
     )
     op.create_index("ix_users_github_id", "users", ["github_id"])
 
-    # === review ===  (표의 review_data)
     op.create_table(
         "review",
         sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
         sa.Column("user_id", sa.Integer, nullable=True),
         sa.Column("model_id", sa.String(64), nullable=False),
         sa.Column("language", sa.String(32), nullable=True),
-        sa.Column("code", sa.Text, nullable=True),          # 길면 MEDIUMTEXT로 바꾸고 싶으면 mysql.LONGTEXT/ MEDIUMTEXT 사용
+        sa.Column("code", sa.Text, nullable=True),
         sa.Column("trigger", sa.String(32), nullable=True),
-        sa.Column("result", mysql.JSON(), nullable=False),  # MySQL JSON
+        sa.Column("result", mysql.JSON(), nullable=False),
         sa.Column("summary", sa.String(255), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         mysql_engine="InnoDB",
@@ -46,7 +42,6 @@ def upgrade():
         ["user_id"], ["id"], onupdate="CASCADE", ondelete="SET NULL"
     )
 
-    # === action_log ===  (표의 log_data)
     op.create_table(
         "action_log",
         sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
@@ -65,7 +60,6 @@ def upgrade():
         ["user_id"], ["id"], onupdate="CASCADE", ondelete="SET NULL"
     )
 
-    # === review_result VIEW ===  (표의 review_result)
     op.execute("""
     CREATE OR REPLACE VIEW review_result AS
     SELECT

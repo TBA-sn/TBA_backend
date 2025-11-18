@@ -24,14 +24,8 @@ def upgrade() -> None:
 
     conn = op.get_bind()
 
-    # 0) 과거 잔재: case 테이블 있을 때만 정리
     conn.execute(text("DROP TABLE IF EXISTS `case`"))
 
-    # 1) criteria_master 드랍 금지 (유지)
-    # op.drop_index(op.f('name'), table_name='criteria_master')
-    # op.drop_table('criteria_master')
-
-    # 2) action_log: timestamp default(now)만 정리
     op.alter_column(
         "action_log",
         "timestamp",
@@ -40,8 +34,6 @@ def upgrade() -> None:
         existing_nullable=False,
     )
 
-    # 3) action_log: 과거 case FK/컬럼 정리 (존재할 때만)
-    #    - fk_actionlog_case 드랍(있을 때만)
     conn.execute(
         text(
             """
@@ -68,7 +60,6 @@ def upgrade() -> None:
     conn.execute(text("EXECUTE stmt"))
     conn.execute(text("DEALLOCATE PREPARE stmt"))
 
-    #    - action_log.case_ref_id 컬럼 제거(있을 때만)
     conn.execute(
         text(
             """
@@ -94,10 +85,6 @@ def upgrade() -> None:
     conn.execute(text("EXECUTE stmt"))
     conn.execute(text("DEALLOCATE PREPARE stmt"))
 
-    # ⚠️ user_id NOT NULL / 인덱스 드랍은 건드리지 않는다
-    # (FK/인덱스 충돌 및 1830/1553 방지)
-
-    # 4) review: created_at default(now)
     op.alter_column(
         "review",
         "created_at",
@@ -106,8 +93,6 @@ def upgrade() -> None:
         existing_nullable=False,
     )
 
-    # 5) review: 과거 case FK/컬럼 정리 (존재할 때만)
-    #    - fk_review_case 드랍(있을 때만)
     conn.execute(
         text(
             """
@@ -134,7 +119,6 @@ def upgrade() -> None:
     conn.execute(text("EXECUTE stmt"))
     conn.execute(text("DEALLOCATE PREPARE stmt"))
 
-    #    - review.criteria / review.case_ref_id 컬럼 제거(있을 때만)
     for col in ("criteria", "case_ref_id"):
         conn.execute(
             text(
@@ -163,7 +147,6 @@ def upgrade() -> None:
         conn.execute(text("EXECUTE stmt"))
         conn.execute(text("DEALLOCATE PREPARE stmt"))
 
-    # 6) users: created_at default(now)
     op.alter_column(
         "users",
         "created_at",
@@ -172,13 +155,8 @@ def upgrade() -> None:
         existing_nullable=False,
     )
 
-    # ❌ 인덱스 드랍은 전부 생략 (특히 ix_action_user_id, ix_review_user_id)
-    # ❌ criteria_master 드랍도 생략
-
-
 def downgrade() -> None:
     """Best-effort downgrade (defaults back to CURRENT_TIMESTAMP; no case/idx recreation)."""
-    # 기본 timestamp default만 원복
     op.alter_column(
         "users",
         "created_at",
@@ -200,4 +178,3 @@ def downgrade() -> None:
         server_default=sa.text("CURRENT_TIMESTAMP"),
         existing_nullable=False,
     )
-    # 나머지(과거 case 테이블/인덱스/구 FK/컬럼) 복구는 생략

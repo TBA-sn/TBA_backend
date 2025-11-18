@@ -15,6 +15,7 @@ from app.models.review import Review
 from app.models.action_log import ActionLog
 from app.routers.auth import get_current_user_id_from_cookie
 import httpx
+import os  # 🔧 추가
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="app/templates")
@@ -28,6 +29,9 @@ DEFAULT_CRITERIA: List[str] = [
     "재사용성",
     "테스트 용이성",
 ]
+
+# 🔧 내부 API 호출용 베이스 URL (로컬 기본: 127.0.0.1:8000)
+INTERNAL_API_BASE = os.getenv("INTERNAL_API_BASE", "http://127.0.0.1:8000")
 
 
 async def _load_default_criteria(session: AsyncSession) -> List[str]:
@@ -44,10 +48,6 @@ def build_code_request_payload(
     aspects: List[str],
     file_path: str | None = None,
 ) -> dict:
-    """
-    POST /v1/reviews/request 에 맞는 Request Body 생성
-    -> ReviewRequest 스키마: { "meta": {...}, "body": {...} }
-    """
     now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
     meta = {
@@ -122,7 +122,9 @@ async def review_submit(
         aspects=criteria,
     )
 
-    url = "http://localhost:8000/v1/reviews/request"
+    # 🔧 내부로는 항상 INTERNAL_API_BASE 사용
+    url = f"{INTERNAL_API_BASE}/v1/reviews/request"
+
     async with httpx.AsyncClient(timeout=20.0) as client:
         res = await client.post(url, json=payload)
 
@@ -221,7 +223,8 @@ async def api_test_submit(
     elif access_cookie:
         final_token = access_cookie
     else:
-        debug_url = f"http://localhost:8000/auth/github/debug/mint?user_id={user_id}"
+        # 🔧 여기서도 INTERNAL_API_BASE 기반
+        debug_url = f"{INTERNAL_API_BASE}/auth/github/debug/mint?user_id={user_id}"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 debug_res = await client.get(debug_url)
@@ -241,7 +244,7 @@ async def api_test_submit(
         aspects=crit_list,
     )
 
-    url = "http://localhost:8000/v1/reviews/request"
+    url = f"{INTERNAL_API_BASE}/v1/reviews/request"
     headers = {"Content-Type": "application/json"}
 
     if final_token:
@@ -297,6 +300,7 @@ async def review_logs(
         "ui/review_logs.html",
         {"request": request, "review_id": review_id, "logs": logs},
     )
+
 
 @router.get("/ws-debug")
 async def ws_debug_page(request: Request):

@@ -1,7 +1,6 @@
 from alembic import op
 import sqlalchemy as sa
 
-# revision identifiers, used by Alembic.
 revision = "7c067d8ff87d"
 down_revision = "add_action_log_report_id"
 branch_labels = None
@@ -9,10 +8,8 @@ depends_on = None
 
 
 def upgrade():
-    # 0) 기존 review 테이블 있으면 날리고 시작
     op.execute("DROP TABLE IF EXISTS review")
 
-    # 1) 새 스펙대로 review 테이블 생성
     op.create_table(
         "review",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),

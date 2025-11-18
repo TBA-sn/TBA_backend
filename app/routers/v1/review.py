@@ -70,10 +70,6 @@ def make_code_fingerprint(code: str) -> str:
 
 
 async def ws_trace(event: str, step: int | None = None, payload: dict | None = None):
-    """
-    WebSocket 디버그용 공통 헬퍼.
-    ws_debug.ws_manager.broadcast(message: dict)를 호출한다고 가정.
-    """
     if not ws_manager:
         return
 
@@ -104,7 +100,9 @@ async def request_review(
     language = body.snippet.language
     file_path = body.snippet.file_path
 
-    code_fingerprint = sha256(code.encode("utf-8")).hexdigest()
+    # fingerprint / request_hash 계산
+    code_fingerprint = make_code_fingerprint(code)
+    request_hash = make_request_hash(body.user_id, code, language)
 
     # model 정보는 body가 아니라 meta.model.name 에서 꺼내자
     model_name: str | None = None
@@ -145,6 +143,7 @@ async def request_review(
         file_path=file_path,
         code=code,
         code_fingerprint=code_fingerprint,
+        # request_hash=request_hash,
         trigger=body.trigger,
         status="processing",
     )
@@ -194,7 +193,6 @@ async def request_review(
         try:
             review.categories = [c.dict() for c in llm_resp.categories]
         except AttributeError:
-            # pydantic v2면 model_dump 사용 가능, 근데 타입 맞추기 귀찮으면 그냥 패스
             review.categories = [
                 {
                     "name": getattr(c, "name", ""),
@@ -216,7 +214,6 @@ async def request_review(
         if isinstance(resp_meta, Meta):
             resp_meta.progress = {"status": "done", "next_step": None}
         else:
-            # dict인 경우 대비
             resp_meta["progress"] = {"status": "done", "next_step": None}
 
     resp_body = ReviewRequestResponseBody(
@@ -249,10 +246,6 @@ async def check_review(
     payload: ReviewCheckRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    """
-    문서의 '리뷰 신규성 확인'에 해당.
-    user_id + code_fingerprint 기준으로 최근 리뷰 존재 여부 확인.
-    """
     body = payload.body
 
     # code fingerprint: sha256(code)
@@ -442,8 +435,20 @@ async def get_review_detail(
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
 
-    # TODO: categories 는 별도 테이블에서 가져오거나 JSON 컬럼에서 파싱
+    # categories JSON 컬럼 → 응답 모델로 매핑
     categories: list[ReviewDetailCategory] = []
+    try:
+        raw_cats = review.categories or []
+        for c in raw_cats:
+            categories.append(
+                ReviewDetailCategory(
+                    name=c.get("name", ""),
+                    score=c.get("score", 0),
+                    comment=c.get("comment", ""),
+                )
+            )
+    except Exception:
+        categories = []
 
     meta = ReviewResultMeta(
         version="v1",

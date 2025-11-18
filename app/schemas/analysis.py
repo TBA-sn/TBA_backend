@@ -30,15 +30,6 @@ class LLMAnalysisRequestBody(BaseModel):
 
 
 class LLMAnalysisRequest(BaseModel):
-    """
-    {
-      "request": {
-        "model": "...",
-        "input": { "code": "...", "language": "..." },
-        "schema": { ... }
-      }
-    }
-    """
     request: LLMAnalysisRequestBody
 
 
@@ -76,37 +67,20 @@ class LLMCallbackRequest(BaseModel):
 # ============================================================
 
 class AnalysisRequestIn(BaseModel):
-    """
-    기존 코드 호환용 입력 스키마.
-    - 최소한으로 meta + request 두 필드 제공
-    - 내부 구조는 Dict[str, Any]로 열어두고, 라우터 코드가
-      자유롭게 키 꺼내서 쓰도록 둠.
-    """
     meta: Optional[Dict[str, Any]] = None
     request: Dict[str, Any]
 
 
 class AnalysisRequestAck(BaseModel):
-    """
-    LLM 요청 접수 ACK 응답용 (대략적인 형태, extra는 Dict로 열어둠)
-    """
     meta: Optional[Dict[str, Any]] = None
     result: Optional[Dict[str, Any]] = None
 
 
 class AnalysisCallbackIn(BaseModel):
-    """
-    LLM worker -> 서버 콜백 입력.
-    기존 코드가 meta / response 구조를 기대할 확률이 높아서 그대로 둠.
-    """
     meta: Dict[str, Any]
     response: Dict[str, Any]
 
 
 class AnalysisStoredOut(BaseModel):
-    """
-    DB에 저장된 분석 결과를 꺼내서 반환할 때 쓰는 출력 모델.
-    record 안에 실제 점수/코멘트 등이 들어가도록 Dict로 열어둔다.
-    """
     meta: Dict[str, Any]
     record: Dict[str, Any]

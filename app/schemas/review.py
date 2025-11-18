@@ -12,10 +12,6 @@ from app.schemas.common import Meta
 # ======================================================================
 
 class ExtensionRequest(BaseModel):
-    """
-    VSCode 확장(또는 UI, 웹 등)에서 /v1/reviews/request로 보내는 본문.
-    meta는 안 보내면 Meta()가 기본으로 들어가도록 한다.
-    """
     user_id: int
     model_id: str
     code: str
@@ -66,30 +62,19 @@ class CodeAnalysisRequest(BaseModel):
 # ======================================================================
 
 class LLMRequest(BaseModel):
-    """
-    review_code() 서비스에 넘기는 LLM 요청 바디.
-    """
     code: str
-    model: str
-    criteria: List[str]
-
+    language: str | None = None
+    model: str | None = None
+    criteria: List[str] = []
 
 class CategoryResult(BaseModel):
-    name: Literal[
-        "유지보수성",
-        "가독성",
-        "확장성",
-        "유연성",
-        "간결성",
-        "재사용성",
-        "테스트 용이성",
-    ]
+    name: str 
     score: float
     comment: str
 
 
 class LLMResponse(BaseModel):
-    scores: dict  # { "global": 82, "model": 76 }
+    scores: dict
     categories: List[CategoryResult]
     summary: str
 
@@ -148,9 +133,6 @@ class MetricsResponse(BaseModel):
 # ======================================================================
 
 class ReviewOut(BaseModel):
-    """
-    /v1/reviews/request 의 response_model.
-    """
     id: int
     user_id: int
     model_id: str
@@ -166,9 +148,6 @@ class ReviewOut(BaseModel):
 
 
 class LogCreate(BaseModel):
-    """
-    ActionLog 생성 시 사용할 단순 DTO (필요하면 사용).
-    """
     user_id: int
     review_id: int
     action: str
@@ -392,3 +371,13 @@ class ReviewDetailResponseBody(BaseModel):
 class ReviewDetailResponse(BaseModel):
     meta: ReviewResultMeta
     response: ReviewDetailResponseBody
+
+class ReviewAPIRequest(BaseModel):
+    code_snippet: str
+
+
+class ReviewAPIResponse(BaseModel):
+    quality_score: float
+    review_summary: str
+    scores_by_category: Dict[str, float]
+    review_details: Dict[str, str]

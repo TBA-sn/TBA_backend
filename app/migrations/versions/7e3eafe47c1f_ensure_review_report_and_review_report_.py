@@ -3,7 +3,6 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import mysql
 from sqlalchemy import text
 
-# 실제 리비전 값으로 고정
 revision = "7e3eafe47c1f"
 down_revision = "1809653bcfa9"
 branch_labels = None
@@ -13,7 +12,6 @@ depends_on = None
 def upgrade():
     conn = op.get_bind()
 
-    # 1) review_report: 없으면 생성
     conn.execute(text("""
         CREATE TABLE IF NOT EXISTS `review_report` (
             `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -30,7 +28,6 @@ def upgrade():
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
     """))
 
-    # 2) review.report_id: 없으면 추가 (information_schema로 체크)
     conn.execute(text("""
         SET @col_exists := (
           SELECT COUNT(*) FROM information_schema.columns
@@ -48,7 +45,6 @@ def upgrade():
     conn.execute(text("EXECUTE stmt"))
     conn.execute(text("DEALLOCATE PREPARE stmt"))
 
-    # 3) 인덱스: 없으면 추가
     conn.execute(text("""
         SET @has_idx := (
           SELECT COUNT(*) FROM information_schema.statistics
@@ -66,7 +62,6 @@ def upgrade():
     conn.execute(text("EXECUTE stmt"))
     conn.execute(text("DEALLOCATE PREPARE stmt"))
 
-    # 4) FK: 없으면 추가
     conn.execute(text("""
         SET @has_fk := (
           SELECT COUNT(*)
@@ -91,7 +86,6 @@ def upgrade():
 def downgrade():
     conn = op.get_bind()
 
-    # FK 있으면 드랍
     conn.execute(text("""
         SET @has_fk := (
           SELECT COUNT(*)
@@ -110,7 +104,6 @@ def downgrade():
     conn.execute(text("EXECUTE stmt"))
     conn.execute(text("DEALLOCATE PREPARE stmt"))
 
-    # 인덱스 있으면 드랍
     conn.execute(text("""
         SET @has_idx := (
           SELECT COUNT(*) FROM information_schema.statistics
@@ -128,7 +121,6 @@ def downgrade():
     conn.execute(text("EXECUTE stmt"))
     conn.execute(text("DEALLOCATE PREPARE stmt"))
 
-    # 컬럼 드랍(있으면만)
     conn.execute(text("""
         SET @col_exists := (
           SELECT COUNT(*) FROM information_schema.columns
@@ -146,5 +138,4 @@ def downgrade():
     conn.execute(text("EXECUTE stmt"))
     conn.execute(text("DEALLOCATE PREPARE stmt"))
 
-    # 테이블 드랍(있으면만)
     conn.execute(text("DROP TABLE IF EXISTS `review_report`;"))

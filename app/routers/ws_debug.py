@@ -20,9 +20,6 @@ class WebSocketManager:
             self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict):
-        """
-        모든 활성 WebSocket 클라이언트에게 message(dict)를 전송.
-        """
         data = json.dumps(message, ensure_ascii=False, default=str)
         to_remove: list[WebSocket] = []
 
@@ -43,9 +40,6 @@ ws_manager = WebSocketManager()
 
 @router.websocket("/ws/debug")
 async def ws_debug_endpoint(websocket: WebSocket):
-    """
-    프론트(브라우저)에서 ws://서버주소/ws/debug 로 연결하는 엔드포인트.
-    """
     await ws_manager.connect(websocket)
     try:
         # 클라이언트에서 보내는 메시지는 안 써도 되지만

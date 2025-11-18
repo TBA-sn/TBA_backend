@@ -3,12 +3,11 @@ import sqlalchemy as sa
 from sqlalchemy import text
 
 revision = "add_action_log_report_id"
-down_revision = "7e3eafe47c1f"  # 바로 직전 리비전 ID로 바꿔줘. (너의 최신 head)
+down_revision = "7e3eafe47c1f"
 
 def upgrade():
     conn = op.get_bind()
 
-    # 1) 컬럼 없으면 추가
     conn.execute(text("""
         SET @col_exists := (
           SELECT COUNT(*) FROM information_schema.columns
@@ -26,7 +25,6 @@ def upgrade():
     conn.execute(text("EXECUTE stmt"))
     conn.execute(text("DEALLOCATE PREPARE stmt"))
 
-    # 2) 인덱스 없으면 추가
     conn.execute(text("""
         SET @has_idx := (
           SELECT COUNT(*) FROM information_schema.statistics
@@ -44,7 +42,6 @@ def upgrade():
     conn.execute(text("EXECUTE stmt"))
     conn.execute(text("DEALLOCATE PREPARE stmt"))
 
-    # 3) FK 없으면 추가 (review_report.id 참조, 삭제 시 SET NULL)
     conn.execute(text("""
         SET @has_fk := (
           SELECT COUNT(*)
@@ -68,7 +65,6 @@ def upgrade():
 def downgrade():
     conn = op.get_bind()
 
-    # FK 있으면 드랍
     conn.execute(text("""
         SET @has_fk := (
           SELECT COUNT(*)
@@ -87,7 +83,6 @@ def downgrade():
     conn.execute(text("EXECUTE stmt"))
     conn.execute(text("DEALLOCATE PREPARE stmt"))
 
-    # 인덱스 있으면 드랍
     conn.execute(text("""
         SET @has_idx := (
           SELECT COUNT(*) FROM information_schema.statistics
@@ -105,7 +100,6 @@ def downgrade():
     conn.execute(text("EXECUTE stmt"))
     conn.execute(text("DEALLOCATE PREPARE stmt"))
 
-    # 컬럼 있으면 드랍
     conn.execute(text("""
         SET @col_exists := (
           SELECT COUNT(*) FROM information_schema.columns
