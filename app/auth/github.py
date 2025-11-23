@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     GITHUB_CLIENT_ID: str
     GITHUB_CLIENT_SECRET: str
-    GITHUB_REDIRECT: str = "http://localhost:8000/auth/github/callback"
+    GITHUB_REDIRECT: str = "http://18.205.229.159:8000/auth/github/callback"
     GITHUB_OAUTH_SCOPE: str = "read:user"
 
 

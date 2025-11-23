@@ -13,7 +13,7 @@
     logEl.scrollTop = logEl.scrollHeight;
   };
 
-  const ws = new WebSocket("ws://localhost:8000/ws/debug");
+  const ws = new WebSocket("ws://18.205.229.159:8000/ws/debug");
 
   ws.onopen = () => log("✅ WS connected");
   ws.onmessage = (event) => {

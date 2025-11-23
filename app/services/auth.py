@@ -7,7 +7,7 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "")
-GITHUB_REDIRECT = os.getenv("GITHUB_REDIRECT", "http://localhost:3000/auth/github/callback")
+GITHUB_REDIRECT = os.getenv("GITHUB_REDIRECT", "http://18.205.229.159:3000/auth/github/callback")
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")
 
 def github_login_url(state: str = "native") -> str:
