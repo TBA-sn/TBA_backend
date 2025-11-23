@@ -15,7 +15,7 @@ from app.routers.v1.action_log import router as action_log_router
 from app.routers.llm import router as llm_router
 from app.routers.ws_debug import router as ws_debug_router
 from app.routers.v1.review_api import router as review_api_router
-
+from app.auth.github import router as gh_router
 
 auth_router = None
 try:
@@ -38,8 +38,9 @@ app = FastAPI(
 
 origins = os.getenv(
     "CORS_ALLOW_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000"
+    "http://localhost:3000,http://127.0.0.1:3000,http://18.205.229.159:3000"
 ).split(",")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -53,6 +54,7 @@ app.include_router(review_router)
 app.include_router(action_log_router)
 app.include_router(review_api_router)
 app.include_router(ws_debug_router)
+app.include_router(gh_router)
 app.include_router(user_router)
 if auth_router:
     app.include_router(auth_router)

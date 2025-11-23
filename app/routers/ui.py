@@ -2,7 +2,7 @@
 from uuid import uuid4
 import json
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import RedirectResponse
@@ -13,29 +13,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.database import get_session
 from app.models.review import Review
 from app.models.action_log import ActionLog
+from app.models.user import User
 from app.routers.auth import get_current_user_id_from_cookie
 import httpx
-import os  # 🔧 추가
+import os
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="app/templates")
 
-DEFAULT_CRITERIA: List[str] = [
-    "유지보수성",
-    "가독성",
-    "확장성",
-    "유연성",
-    "간결성",
-    "재사용성",
-    "테스트 용이성",
-]
-
-# 🔧 내부 API 호출용 베이스 URL (로컬 기본: 127.0.0.1:8000)
-INTERNAL_API_BASE = os.getenv("INTERNAL_API_BASE", "http://127.0.0.1:8000")
+INTERNAL_API_BASE: str = os.getenv("INTERNAL_API_BASE", "http://127.0.0.1:8000")
 
 
-async def _load_default_criteria(session: AsyncSession) -> List[str]:
-    return DEFAULT_CRITERIA
+async def _get_current_user(
+    request: Request,
+    session: AsyncSession,
+) -> Optional[User]:
+    try:
+        uid = get_current_user_id_from_cookie(request)
+    except Exception:
+        return None
+
+    if not uid:
+        return None
+
+    row = await session.execute(select(User).where(User.id == uid))
+    return row.scalar_one_or_none()
 
 
 def build_code_request_payload(
@@ -56,13 +58,8 @@ def build_code_request_payload(
         "correlation_id": str(uuid4()),
         "actor": "web",
         "identity": None,
-        "model": {
-            "name": model_id,
-        },
-        "analysis": {
-            "aspects": aspects,
-            "total_steps": 6,
-        },
+        "model": {"name": model_id},
+        "analysis": {"aspects": aspects, "total_steps": 6},
         "progress": {"status": "pending", "next_step": 1},
         "result": None,
         "audit": None,
@@ -79,39 +76,49 @@ def build_code_request_payload(
         "model": model_id,
     }
 
-    # ✅ ReviewRequest(meta=..., body=...) 구조
     return {"meta": meta, "body": body}
 
 
-# =====================================================================================
+# =====================================================================
 # 리뷰 폼
-# =====================================================================================
+# =====================================================================
 
 @router.get("/review")
-async def review_form(request: Request):
-    return templates.TemplateResponse("ui/review_form.html", {"request": request})
+async def review_form(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    user = await _get_current_user(request, session)
+
+    ctx = {
+        "request": request,
+        "current_user_id": user.id if user else None,
+        "current_user_login": user.login if user else None,
+    }
+    return templates.TemplateResponse("ui/review_form.html", ctx)
 
 
 @router.post("/review")
 async def review_submit(
     request: Request,
-    session: AsyncSession = Depends(get_session),
     user_id: int | None = Form(None),
     model_id: str = Form(...),
     language: str = Form(...),
     trigger: str = Form(...),
     code: str = Form(...),
 ):
-    # 쿠키에 user_id 있으면 그것 우선 사용
     try:
         uid = get_current_user_id_from_cookie(request)
     except Exception:
+        uid = None
+
+    if uid is None:
         uid = user_id
 
     if uid is None:
-        return RedirectResponse(url="/ui/reviews", status_code=303)
+        return RedirectResponse(url="/auth/github/login", status_code=303)
 
-    criteria = await _load_default_criteria(session)
+    criteria: List[str] = []
 
     payload = build_code_request_payload(
         user_id=int(uid),
@@ -122,18 +129,15 @@ async def review_submit(
         aspects=criteria,
     )
 
-    # 🔧 내부로는 항상 INTERNAL_API_BASE 사용
     url = f"{INTERNAL_API_BASE}/v1/reviews/request"
 
-    async with httpx.AsyncClient(timeout=20.0) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         res = await client.post(url, json=payload)
 
     if res.status_code != 200:
-        # 디버깅 필요하면 여기서 res.text 찍어봐도 됨
         return RedirectResponse(url="/ui/reviews", status_code=303)
 
     body = res.json()
-    # ⬅️ ReviewRequestResponse(meta=..., body=...) 형태라 여기서 꺼내야 함
     resp_body = body.get("body") or {}
     review_id = resp_body.get("review_id")
 
@@ -143,9 +147,9 @@ async def review_submit(
     return RedirectResponse(url=f"/ui/review/{review_id}", status_code=303)
 
 
-# =====================================================================================
-# 리뷰 상세 / 리스트
-# =====================================================================================
+# =====================================================================
+# 리뷰 상세 / 목록
+# =====================================================================
 
 @router.get("/review/{review_id}")
 async def review_detail(
@@ -158,9 +162,16 @@ async def review_detail(
     if not rec:
         return RedirectResponse(url="/ui/reviews", status_code=303)
 
+    user = await _get_current_user(request, session)
+
     return templates.TemplateResponse(
         "ui/review_detail.html",
-        {"request": request, "rec": rec},
+        {
+            "request": request,
+            "rec": rec,
+            "current_user_id": user.id if user else None,
+            "current_user_login": user.login if user else None,
+        },
     )
 
 
@@ -175,46 +186,77 @@ async def review_list(
         stmt = stmt.where(Review.user_id == user_id)
 
     rows = (await session.execute(stmt)).scalars().all()
+    user = await _get_current_user(request, session)
+
     return templates.TemplateResponse(
         "ui/review_list.html",
-        {"request": request, "rows": rows, "user_id": user_id},
+        {
+            "request": request,
+            "rows": rows,
+            "user_id": user_id,
+            "current_user_id": user.id if user else None,
+            "current_user_login": user.login if user else None,
+        },
     )
 
 
-# =====================================================================================
+# =====================================================================
 # API 테스트 화면 (/ui/api-test)
-# =====================================================================================
+# =====================================================================
 
 @router.get("/api-test")
-async def api_test_form(request: Request):
+async def api_test_form(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    user = await _get_current_user(request, session)
+
     return templates.TemplateResponse(
         "ui/api_test.html",
-        {"request": request, "resp": None},
+        {
+            "request": request,
+            "resp": None,
+            "current_user_id": user.id if user else None,
+            "current_user_login": user.login if user else None,
+        },
     )
 
 
 @router.post("/api-test")
 async def api_test_submit(
     request: Request,
-    session: AsyncSession = Depends(get_session),
-    user_id: str = Form(...),
+    user_id: str = Form(""),
     model_id: str = Form(...),
     language: str = Form(...),
     trigger: str = Form(...),
     code: str = Form(...),
     token: str | None = Form(None),
     criteria: str | None = Form(None),
+    file_path: str | None = Form(None),
+    session: AsyncSession = Depends(get_session),
 ):
-    # criteria 파싱
+    user = await _get_current_user(request, session)
+    effective_user_id: Optional[int] = None
+
+    if user:
+        effective_user_id = user.id
+    elif user_id:
+        effective_user_id = int(user_id)
+
+    if effective_user_id is None:
+        return RedirectResponse(url="/auth/github/login", status_code=303)
+
     if criteria:
         crit_list = [c.strip() for c in criteria.split(",") if c.strip()]
     else:
-        crit_list = await _load_default_criteria(session)
+        crit_list = []
 
-    # LLM에 넘길 디버그용 payload (화면에서 보여줄 용도)
-    llm_payload = {"code": code, "model": model_id, "criteria": crit_list}
+    llm_payload = {
+        "code": code,
+        "model": model_id,
+        "criteria": crit_list,
+    }
 
-    # 토큰 결정
     final_token: str | None = None
     access_cookie = request.cookies.get("access_token")
 
@@ -223,25 +265,24 @@ async def api_test_submit(
     elif access_cookie:
         final_token = access_cookie
     else:
-        # 🔧 여기서도 INTERNAL_API_BASE 기반
-        debug_url = f"{INTERNAL_API_BASE}/auth/github/debug/mint?user_id={user_id}"
+        debug_url = f"{INTERNAL_API_BASE}/auth/github/debug/mint?user_id={effective_user_id}"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 debug_res = await client.get(debug_url)
             if debug_res.status_code == 200:
                 data = debug_res.json()
-                final_token = data.get("access_token")
+                final_token = data.get("body", {}).get("access_token")
         except Exception:
             final_token = None
 
-    # ✅ /v1/reviews/request와 같은 포맷으로 생성
     payload = build_code_request_payload(
-        user_id=int(user_id),
+        user_id=effective_user_id,
         model_id=model_id,
         language=language,
         trigger=trigger,
         code=code,
         aspects=crit_list,
+        file_path=file_path,
     )
 
     url = f"{INTERNAL_API_BASE}/v1/reviews/request"
@@ -254,13 +295,20 @@ async def api_test_submit(
     if access_cookie:
         cookies["access_token"] = access_cookie
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        res = await client.post(url, headers=headers, cookies=cookies, json=payload)
-
     try:
-        body = res.json()
-    except Exception:
-        body = {"raw": res.text}
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            res = await client.post(url, headers=headers, cookies=cookies, json=payload)
+        try:
+            body = res.json()
+        except Exception:
+            body = {"raw": res.text}
+        status = res.status_code
+    except httpx.ReadTimeout:
+        res = None
+        body = {
+            "error": "ReadTimeout: /v1/reviews/request 응답이 너무 오래 걸렸습니다."
+        }
+        status = 504
 
     pretty_resp = json.dumps(body, ensure_ascii=False, indent=2)
     pretty_sent = json.dumps(payload, ensure_ascii=False, indent=2)
@@ -270,18 +318,20 @@ async def api_test_submit(
         "ui/api_test.html",
         {
             "request": request,
-            "resp": {"status": res.status_code, "json": body, "pretty": pretty_resp},
+            "resp": {"status": status, "json": body, "pretty": pretty_resp},
             "sent": payload,
             "sent_pretty": pretty_sent,
             "llm_payload_pretty": llm_payload_pretty,
             "used_authorization": bool(final_token),
+            "current_user_id": user.id if user else None,
+            "current_user_login": user.login if user else None,
         },
     )
 
 
-# =====================================================================================
+# =====================================================================
 # 리뷰 로그
-# =====================================================================================
+# =====================================================================
 
 @router.get("/review/{review_id}/logs")
 async def review_logs(
@@ -296,9 +346,17 @@ async def review_logs(
     )
     logs = (await session.execute(stmt)).scalars().all()
 
+    user = await _get_current_user(request, session)
+
     return templates.TemplateResponse(
         "ui/review_logs.html",
-        {"request": request, "review_id": review_id, "logs": logs},
+        {
+            "request": request,
+            "review_id": review_id,
+            "logs": logs,
+            "current_user_id": user.id if user else None,
+            "current_user_login": user.login if user else None,
+        },
     )
 
 

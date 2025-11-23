@@ -1,10 +1,17 @@
 # app/routers/v1/review_api.py
 
+from typing import Dict, List
+
 from fastapi import APIRouter
+
 from app.schemas.review import (
     ReviewAPIRequest,
     ReviewAPIResponse,
-    LLMRequest,      # 이미 있는 스키마라고 가정
+    LLMRequest,
+    LLMQualityResponse,
+    ScoresByCategory,
+    LLMReviewDetail,
+    IssueSeverity,
 )
 from app.services.llm_client import review_code
 
@@ -12,40 +19,57 @@ router = APIRouter(prefix="/api/v1", tags=["review-api"])
 
 
 @router.post("/review/", response_model=ReviewAPIResponse)
-async def review_endpoint(payload: ReviewAPIRequest):
-    # 1) 기존 LLMRequest로 변환
-    # language는 일단 "python" 하드코딩, 필요하면 프론트에서 같이 보내도록 확장
+async def review_endpoint(payload: ReviewAPIRequest) -> ReviewAPIResponse:
     llm_req = LLMRequest(
         code=payload.code_snippet,
         language="python",
         model=None,
-        criteria=["bug", "maintainability", "style", "security"],
+        criteria=[
+            "Bug",
+            "Performance",
+            "Maintainability",
+            "Style",
+            "Docs",
+            "Dependency",
+            "Security",
+            "Testing",
+        ],
     )
 
-    # 2) 로컬 LLM / LM Studio 호출
-    llm_res = await review_code(llm_req)
+    llm_res: LLMQualityResponse = await review_code(llm_req)
 
-    # 3) 카테고리 매핑: 이름을 소문자로 깔고 필요한 4개만 추출
-    scores_by_category: dict[str, float] = {}
-    review_details: dict[str, str] = {}
+    s: ScoresByCategory = llm_res.scores_by_category
+    scores_by_category: Dict[str, float] = {
+        "bug": float(s.bug),
+        "performance": float(s.performance),
+        "maintainability": float(s.maintainability),
+        "style": float(s.style),
+        "docs": float(s.docs),
+        "dependency": float(s.dependency),
+        "security": float(s.security),
+        "testing": float(s.testing),
+    }
 
-    for cat in llm_res.categories:
-        key = (cat.name or "").lower()
-        if key in ("bug", "maintainability", "style", "security"):
-            scores_by_category[key] = float(cat.score)
-            review_details[key] = cat.comment or ""
-
-    # 4) quality_score 계산: 지정된 4개 평균, 없으면 fallback으로 global 점수 사용
-    if scores_by_category:
-        quality_score = sum(scores_by_category.values()) / len(scores_by_category)
-    else:
-        quality_score = float(llm_res.scores.get("global", 0.0))
-
-    review_summary = llm_res.summary or "No summary provided by LLM."
+    review_details_list: List[LLMReviewDetail] = []
+    for category, text in (llm_res.review_details or {}).items():
+        cat = str(category)
+        comment = str(text)
+        review_details_list.append(
+            LLMReviewDetail(
+                issue_id=cat,
+                issue_category=cat,
+                issue_severity=IssueSeverity.MEDIUM,
+                issue_summary=comment,
+                issue_details=comment,
+                issue_line_number=0,
+                issue_column_number=None,
+            )
+        )
 
     return ReviewAPIResponse(
-        quality_score=quality_score,
-        review_summary=review_summary,
+        quality_score=float(llm_res.quality_score or 0.0),
+        review_summary=llm_res.review_summary
+        or "LLM 품질 API에서 요약을 제공하지 않았습니다.",
         scores_by_category=scores_by_category,
-        review_details=review_details,
+        review_details=review_details_list,
     )

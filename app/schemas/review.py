@@ -1,5 +1,6 @@
 # app/schemas/review.py
 from datetime import datetime
+from enum import Enum
 from typing import List, Literal, Optional, Dict, Any
 
 from pydantic import BaseModel, Field
@@ -7,26 +8,16 @@ from pydantic import BaseModel, Field
 from app.schemas.common import Meta
 
 
-# ======================================================================
-# 1️⃣ Extension → /v1/reviews/request 본문
-# ======================================================================
-
 class ExtensionRequest(BaseModel):
     user_id: int
     model_id: str
     code: str
     language: str
     trigger: str
-    # 선택: 기준 목록. 없으면 서버에서 기본 criteria 사용.
     criteria: Optional[List[str]] = None
 
-    # meta를 선택으로 두고, 안 들어오면 Meta() 기본 생성
     meta: Meta = Field(default_factory=Meta)
 
-
-# ======================================================================
-# 2️⃣ 코드 분석(추가적인 고급 API용) 스키마
-# ======================================================================
 
 class Snippet(BaseModel):
     code: str
@@ -45,7 +36,7 @@ class EvaluationInfo(BaseModel):
 
 
 class CodeAnalysisRequestBody(BaseModel):
-    user_id: int                                    # 🔥 int
+    user_id: int
     snippet: Snippet
     detection: Optional[DetectionInfo] = None
     evaluation: EvaluationInfo
@@ -57,35 +48,51 @@ class CodeAnalysisRequest(BaseModel):
     request: CodeAnalysisRequestBody
 
 
-# ======================================================================
-# 3️⃣ LLM 요청/응답 (서비스 내부에서 사용)
-# ======================================================================
-
 class LLMRequest(BaseModel):
     code: str
     language: str | None = None
     model: str | None = None
     criteria: List[str] = []
 
-class CategoryResult(BaseModel):
-    name: str 
-    score: float
-    comment: str
+
+class IssueSeverity(str, Enum):
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+
+
+class Category(str, Enum):
+    BUG = "Bug"
+    PERFORMANCE = "Performance"
+    MAINTAINABILITY = "Maintainability"
+    STYLE = "Style"
+    DOCS = "Docs"
+    DEPENDENCY = "Dependency"
+    SECURITY = "Security"
+    TESTING = "Testing"
+
+
+class LLMReviewDetail(BaseModel):
+    issue_id: str
+    issue_category: str
+    issue_severity: IssueSeverity
+    issue_summary: str
+    issue_details: str
+    issue_line_number: int
+    issue_column_number: Optional[int] = None
 
 
 class LLMResponse(BaseModel):
-    scores: dict
-    categories: List[CategoryResult]
-    summary: str
+    quality_score: float
+    review_summary: str
+    scores_by_category: Dict[str, float]
+    review_details: List[LLMReviewDetail]
 
-# ======================================================================
-# 9️⃣ 삭제 요청/응답
-# ======================================================================
 
 class ReviewDeleteRequestBody(BaseModel):
-    user_id: int                                    # 🔥 int
+    user_id: int
     scope: Literal["single", "all"]
-    review_id: Optional[int] = None                 # 🔥 int
+    review_id: Optional[int] = None
 
 
 class ReviewDeleteRequest(BaseModel):
@@ -95,15 +102,11 @@ class ReviewDeleteRequest(BaseModel):
 
 class ReviewDeleteResponse(BaseModel):
     meta: Meta
-    response: dict  # { "deleted": 1 }
+    response: dict
 
-
-# ======================================================================
-# 🔟 통계 조회
-# ======================================================================
 
 class MetricsRequestBody(BaseModel):
-    user_id: int                                    # 🔥 int
+    user_id: int
     group_by: Literal["day", "week", "month"] = "day"
     metrics: List[str] = ["global_score_avg", "model_score_avg"]
 
@@ -128,10 +131,6 @@ class MetricsResponse(BaseModel):
     response: MetricsResponseBody
 
 
-# ======================================================================
-# 🔁 /v1/reviews/request 응답용 (ORM → JSON 변환)
-# ======================================================================
-
 class ReviewOut(BaseModel):
     id: int
     user_id: int
@@ -153,44 +152,54 @@ class LogCreate(BaseModel):
     action: str
     meta: Meta
 
+
+# ===== (구) 단순 신규성 체크 버전 =====
 class ReviewCheckRequest(BaseModel):
     user_id: int
     code: str
     language: str
     file_path: str
 
+
 class ReviewCheckResponse(BaseModel):
     is_new: bool
     reason: str
     last_review_id: Optional[int] = None
+
 
 class ReviewSnippet(BaseModel):
     code: str
     language: str
     file_path: str | None = None
 
+
 class ReviewEvaluation(BaseModel):
     aspects: List[str]
+
 
 class ReviewRequestBody(BaseModel):
     user_id: int
     snippet: Snippet
     trigger: Literal["manual", "auto"] = "manual"
 
+
 class ReviewCreateEnvelope(BaseModel):
     meta: Meta
     request: ReviewRequestBody
+
 
 class LLMAnalysisRequest(BaseModel):
     code: str
     language: str
     aspect: str
 
+
 class LLMAnalysisResponse(BaseModel):
     aspect: str
     score: int
     comment: str
     model: str | None = None
+
 
 class LLMCallbackBody(BaseModel):
     review_id: int
@@ -199,26 +208,44 @@ class LLMCallbackBody(BaseModel):
     comment: str
     model: str
 
+
+# ====== (구) 카테고리 리스트 기반 – categories 배열 제거 버전 ======
 class ReviewCategoryResult(BaseModel):
     name: str
     score: int
     comment: str
 
+
 class ReviewScores(BaseModel):
     global_score: int
     model_score: int
 
+
 class ReviewResultRecord(BaseModel):
+    # 옛 구조와의 호환을 위해 남겨두지만,
+    # categories 배열은 제거하고 카테고리별 점수/코멘트 필드로 분리
     user_id: str
     model: str
     trigger: str
     scores: ReviewScores
-    categories: List[ReviewCategoryResult]
+
+    score_bug: int
+    score_maintainability: int
+    score_style: int
+    score_security: int
+
+    comment_bug: Optional[str] = None
+    comment_maintainability: Optional[str] = None
+    comment_style: Optional[str] = None
+    comment_security: Optional[str] = None
+
     summary: str
     status: str
 
+
 class ReviewResultPatch(BaseModel):
     record: ReviewResultRecord
+
 
 class ReviewListItem(BaseModel):
     review_id: str
@@ -229,10 +256,13 @@ class ReviewListItem(BaseModel):
     status: str
     created_at: datetime
 
+
 class ReviewListResponse(BaseModel):
     items: List[ReviewListItem]
 
+
 class ReviewDetailResponse(BaseModel):
+    # 옛 Response 예시용 – categories 배열 제거
     review_id: str
     global_score: int
     model_score: int
@@ -240,8 +270,19 @@ class ReviewDetailResponse(BaseModel):
     trigger: str
     status: str
     created_at: datetime
-    categories: List[ReviewCategoryResult]
 
+    score_bug: int
+    score_maintainability: int
+    score_style: int
+    score_security: int
+
+    comment_bug: Optional[str] = None
+    comment_maintainability: Optional[str] = None
+    comment_style: Optional[str] = None
+    comment_security: Optional[str] = None
+
+
+# ====== (신) Meta 포함 신규성 체크 / 요청 / 결과 스펙 ======
 class ReviewCheckBody(BaseModel):
     user_id: int
     code: str
@@ -262,7 +303,8 @@ class ReviewCheckResponseBody(BaseModel):
 
 class ReviewCheckResponse(BaseModel):
     meta: Meta
-    body: ReviewCheckResponseBody 
+    body: ReviewCheckResponseBody
+
 
 class ReviewRequest(BaseModel):
     meta: Meta
@@ -278,26 +320,43 @@ class ReviewRequestResponse(BaseModel):
     meta: Meta
     body: ReviewRequestResponseBody
 
+
 class ReviewResultScores(BaseModel):
-    aspect_scores: Dict[str, int]
+    # aspect_scores 대신 전역 점수 + 효율지수만 유지
     global_score: int
     model_score: int
     efficiency_index: float
 
 
 class ReviewCategoryResult(BaseModel):
+    # 유지하지만 더 이상 리스트로 묶어 쓰지 않음 (하단 Record에서도 배열 제거)
     name: str
     score: int
     comment: str
 
 
 class ReviewResultRecord(BaseModel):
-    review_id: str
-    user_id: str
+    """
+    /v1/reviews/{review_id}/result PATCH 에서 쓰는 payload
+    categories 배열을 날리고 카테고리별 점수/코멘트를 전부 필드로 쪼갠 구조
+    """
+    review_id: int
+    user_id: int
     model: str
     trigger: str
-    scores: ReviewResultScores
-    categories: list[ReviewCategoryResult]
+    scores: ReviewResultScores  # global_score, model_score, efficiency_index
+
+    # ===== 카테고리별 점수/코멘트 – 배열 대신 개별 필드 =====
+    score_bug: int
+    score_maintainability: int
+    score_style: int
+    score_security: int
+
+    comment_bug: Optional[str] = None
+    comment_maintainability: Optional[str] = None
+    comment_style: Optional[str] = None
+    comment_security: Optional[str] = None
+
     summary: str
     status: str
 
@@ -313,7 +372,6 @@ class ReviewResultRequest(BaseModel):
     meta: ReviewResultMeta
     record: ReviewResultRecord
 
-    # app/schemas/review.py 에 추가
 
 class ReviewListFilter(BaseModel):
     language: Optional[str] = None
@@ -326,7 +384,7 @@ class ReviewListRequestBody(BaseModel):
 
 
 class ReviewListRequest(BaseModel):
-    meta: ReviewResultMeta  # 동일 meta 타입 재사용
+    meta: ReviewResultMeta
     request: ReviewListRequestBody
 
 
@@ -351,12 +409,25 @@ class ReviewListResponse(BaseModel):
 
 
 class ReviewDetailCategory(BaseModel):
+    """
+    참고용으로 남겨두지만,
+    실제 ResponseBody에는 categories 리스트를 더 이상 포함하지 않음.
+    """
     name: str
     score: int
     comment: str
 
 
 class ReviewDetailResponseBody(BaseModel):
+    """
+    /v1/reviews/{review_id} 상세 Response
+
+    기존:
+      categories: [ { name, score, comment }, ... ]  ❌
+
+    변경:
+      score_* / comment_* 필드로 전부 쪼갬 ✅
+    """
     review_id: int
     global_score: Optional[int]
     model_score: Optional[int]
@@ -365,13 +436,26 @@ class ReviewDetailResponseBody(BaseModel):
     trigger: str
     status: str
     created_at: str
-    categories: list[ReviewDetailCategory]
+
+    # 카테고리별 점수
+    score_bug: Optional[int] = None
+    score_maintainability: Optional[int] = None
+    score_style: Optional[int] = None
+    score_security: Optional[int] = None
+
+    # 카테고리별 코멘트
+    comment_bug: Optional[str] = None
+    comment_maintainability: Optional[str] = None
+    comment_style: Optional[str] = None
+    comment_security: Optional[str] = None
 
 
 class ReviewDetailResponse(BaseModel):
     meta: ReviewResultMeta
     response: ReviewDetailResponseBody
 
+
+# ===== /api/v1/review 간단 버전 =====
 class ReviewAPIRequest(BaseModel):
     code_snippet: str
 
@@ -380,4 +464,71 @@ class ReviewAPIResponse(BaseModel):
     quality_score: float
     review_summary: str
     scores_by_category: Dict[str, float]
+    review_details: List[LLMReviewDetail]
+
+
+# ===== 새 LLM 결과 포맷 (scores_by_category를 타입으로 고정) =====
+class ReviewDetailItem(BaseModel):
+    """
+    한 개의 이슈(버그/성능/스타일 등)에 대한 상세 정보.
+    LLM이 세부 이슈를 쏴줄 때 사용.
+    """
+    issue_id: Optional[str] = None
+    issue_category: Category
+    issue_severity: IssueSeverity
+    issue_summary: str
+    issue_details: Optional[str] = None
+    issue_line_number: Optional[int] = None
+    issue_column_number: Optional[int] = None
+
+
+class ScoresByCategory(BaseModel):
+    """
+    8개 카테고리별 점수. 안 온 건 0으로 기본값 처리.
+    """
+    bug: int = 0
+    performance: int = 0
+    maintainability: int = 0
+    style: int = 0
+    docs: int = 0
+    dependency: int = 0
+    security: int = 0
+    testing: int = 0
+
+
+class LLMQualityResponse(BaseModel):
+    quality_score: int
+    review_summary: str
+    scores_by_category: ScoresByCategory
+    # 카테고리 이름 -> 요약 코멘트
     review_details: Dict[str, str]
+
+
+# ===== DB -> 응답 매핑용 =====
+class ReviewItem(BaseModel):
+    id: int
+    user_id: int
+    model: str
+    trigger: str
+    language: Optional[str] = None
+
+    quality_score: int
+    summary: str
+
+    score_bug: int
+    score_maintainability: int
+    score_style: int
+    score_security: int
+
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ReviewWithDetails(BaseModel):
+    review: ReviewItem
+    scores_by_category: ScoresByCategory
+    review_details: List[ReviewDetailItem]

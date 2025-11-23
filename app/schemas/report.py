@@ -4,7 +4,7 @@ from typing import Optional, List
 
 class ReviewCaseBrief(BaseModel):
     review_id: int
-    category: Optional[str] = None  # 결과 안에 카테고리명 있으면 뽑아 매핑
+    category: Optional[str] = None
 
 class ReviewReportCreate(BaseModel):
     model_id: str

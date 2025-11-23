@@ -1,5 +1,4 @@
 # app/routers/llm/__init__.py
-
 from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -18,31 +17,31 @@ except Exception:
     CriteriaMaster = None
 
 from app.schemas.analysis import (
-    AnalysisRequestIn, AnalysisRequestAck, AnalysisCallbackIn, AnalysisStoredOut,
+    AnalysisRequestIn,
+    AnalysisRequestAck,
+    AnalysisCallbackIn,
+    AnalysisStoredOut,
 )
-from app.schemas.review import LLMRequest, LLMResponse
+from app.schemas.review import LLMRequest, LLMQualityResponse
 from app.services.llm_client import review_code
 
 router = APIRouter(prefix="/v1/analysis/llm", tags=["analysis-llm"])
 
-async def _load_default_criteria(session: AsyncSession) -> list[str]:
-    if CriteriaMaster is None:
-        return ["유지보수성","가독성","확장성","유연성","간결성","재사용성","테스트 용이성"]
 
+async def _load_default_criteria(session: AsyncSession) -> list[str]:
     rows = (
         await session.execute(
             select(CriteriaMaster)
             .where(
-                CriteriaMaster.enabled == True,   
-                CriteriaMaster.is_default == True,
+                CriteriaMaster.enabled == True,    # noqa: E712
+                CriteriaMaster.is_default == True,  # noqa: E712
             )
             .order_by(CriteriaMaster.sort_order.asc(), CriteriaMaster.id.asc())
         )
     ).scalars().all()
 
-    return [r.name for r in rows] or [
-        "유지보수성","가독성","확장성","유연성","간결성","재사용성","테스트 용이성"
-    ]
+    return [r.name for r in rows]
+
 
 @router.post("/request", response_model=AnalysisRequestAck, summary="코드 분석 요청(LLM로 전달)")
 async def analysis_llm_request(
@@ -53,16 +52,18 @@ async def analysis_llm_request(
     case_id = body.case_id or f"c-{uuid4().hex}"
     criteria = body.criteria or await _load_default_criteria(session)
 
-    session.add(ActionLog(
-        log_id=f"lg-{uuid4().hex}",
-        user_id=user_id,
-        case_id=case_id,
-        action="LLM_REQUEST_OUT",
-    ))
+    session.add(
+        ActionLog(
+            log_id=f"lg-{uuid4().hex}",
+            user_id=user_id,
+            case_id=case_id,
+            action="LLM_REQUEST_OUT",
+        )
+    )
     await session.commit()
 
     if body.direct:
-        llm_res: LLMResponse = await review_code(
+        llm_res: LLMQualityResponse = await review_code(
             LLMRequest(code=body.code, model=body.model, criteria=criteria)
         )
         rev = Review(
@@ -72,20 +73,23 @@ async def analysis_llm_request(
             trigger="direct",
             code=body.code,
             result=llm_res.model_dump(),
-            summary=llm_res.summary,
+            summary=llm_res.review_summary,
         )
         session.add(rev)
         await session.flush()
-        session.add(ActionLog(
-            log_id=f"lg-{uuid4().hex}",
-            user_id=user_id,
-            case_id=case_id,
-            action="LLM_RESULT_IN",
-        ))
+        session.add(
+            ActionLog(
+                log_id=f"lg-{uuid4().hex}",
+                user_id=user_id,
+                case_id=case_id,
+                action="LLM_RESULT_IN",
+            )
+        )
         await session.commit()
         return AnalysisRequestAck(case_id=case_id, status="requested_direct")
 
     return AnalysisRequestAck(case_id=case_id, status="requested")
+
 
 @router.post("/callback", response_model=AnalysisStoredOut, summary="LLM 결과 콜백(저장)")
 async def analysis_llm_callback(
@@ -101,15 +105,17 @@ async def analysis_llm_callback(
         trigger="callback",
         code="",
         result=llm_res.model_dump(),
-        summary=llm_res.summary,
+        summary=llm_res.review_summary,
     )
     session.add(rev)
     await session.flush()
-    session.add(ActionLog(
-        log_id=f"lg-{uuid4().hex}",
-        user_id=None,
-        case_id=body.case_id,
-        action="LLM_RESULT_IN",
-    ))
+    session.add(
+        ActionLog(
+            log_id=f"lg-{uuid4().hex}",
+            user_id=None,
+            case_id=body.case_id,
+            action="LLM_RESULT_IN",
+        )
+    )
     await session.commit()
     return AnalysisStoredOut(case_id=body.case_id, review_id=rev.id, status="stored")

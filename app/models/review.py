@@ -1,16 +1,14 @@
 # app/models/review.py
-from datetime import datetime
-
 from sqlalchemy import (
     BigInteger,
     Column,
+    DateTime,
+    ForeignKey,
     Integer,
     String,
     Text,
-    DateTime,
-    JSON,
-    Float,
 )
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.utils.database import Base
@@ -19,38 +17,83 @@ from app.utils.database import Base
 class Review(Base):
     __tablename__ = "review"
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, index=True, nullable=False)
+    id = Column(BigInteger, primary_key=True, index=True)
+    user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False, index=True)
 
-    # 코드 메타
-    language = Column(String(50), nullable=False)
-    file_path = Column(String(255), nullable=False)
-    code = Column(Text, nullable=False)
+    model = Column(String(255), nullable=False)      # 사용한 LLM 모델 이름
+    trigger = Column(String(50), nullable=False)     # 'manual', 'save', 'commit' 등
+    language = Column(String(50), nullable=True)     # 'python', 'typescript' 등
 
-    # 식별/트리거 정보
-    code_fingerprint = Column(String(128), index=True)   # sha256(code)
-    trigger = Column(String(20), nullable=False, default="manual")
-    status = Column(String(20), nullable=False, default="pending")
+    # ===== 점수 & 요약 =====
+    quality_score = Column(Integer, nullable=False)  # 0~100 (전체 품질 점수)
+    summary = Column(Text, nullable=False)           # review_summary
 
-    # 점수 요약(숫자 컬럼 – 필요하면 사용)
-    global_score = Column(Integer, nullable=True)
-    model_score = Column(Integer, nullable=True)
-    efficiency_index = Column(Float, nullable=True)
+    # scores_by_category (8개로 확장)
+    score_bug = Column(Integer, nullable=False)
+    score_performance = Column(Integer, nullable=False)
+    score_maintainability = Column(Integer, nullable=False)
+    score_style = Column(Integer, nullable=False)
+    score_docs = Column(Integer, nullable=False)
+    score_dependency = Column(Integer, nullable=False)
+    score_security = Column(Integer, nullable=False)
+    score_testing = Column(Integer, nullable=False)
 
-    # 한 줄 요약
-    summary = Column(Text, nullable=True)
+    # 카테고리별 코멘트 (선택)
+    comment_bug = Column(Text, nullable=True)
+    comment_performance = Column(Text, nullable=True)
+    comment_maintainability = Column(Text, nullable=True)
+    comment_style = Column(Text, nullable=True)
+    comment_docs = Column(Text, nullable=True)
+    comment_dependency = Column(Text, nullable=True)
+    comment_security = Column(Text, nullable=True)
+    comment_testing = Column(Text, nullable=True)
 
-    # 🔥 상세 JSON 컬럼들 (LLM 결과 전체 저장)
-    #   - scores: { global_score, model_score, efficiency_index } 같은 형태
-    #   - categories: [{ name, score, comment }, ...]
-    scores = Column(JSON, nullable=True)
-    categories = Column(JSON, nullable=True)
+    status = Column(String(20), nullable=False, default="done")  # 'done', 'processing' 등
 
-    # 타임스탬프
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
+        nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
-        nullable=False,
     )
+
+    details = relationship(
+        "ReviewDetail",
+        back_populates="review",
+        cascade="all, delete-orphan",
+    )
+
+
+class ReviewDetail(Base):
+    __tablename__ = "review_detail"
+
+    id = Column(BigInteger, primary_key=True, index=True)
+    review_id = Column(
+        BigInteger,
+        ForeignKey("review.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    issue_id = Column(String(50), nullable=True)          # "E501", "B101" 등
+    issue_category = Column(String(100), nullable=False)  # "line_too_long" 등
+    issue_severity = Column(String(10), nullable=False)   # "HIGH", "MEDIUM", "LOW"
+
+    issue_summary = Column(String(255), nullable=False)
+    issue_details = Column(Text, nullable=True)
+
+    issue_line_number = Column(Integer, nullable=True)
+    issue_column_number = Column(Integer, nullable=True)
+
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    review = relationship("Review", back_populates="details")

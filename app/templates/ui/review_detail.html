@@ -8,49 +8,114 @@
   <b>user_id</b>: {{ rec.user_id }}
   | <b>model</b>: {{ rec.model }}
   | <b>trigger</b>: {{ rec.trigger }}
+  | <b>language</b>: {{ rec.language or 'N/A' }}
   | <b>status</b>: {{ rec.status }}
   | <b>created_at</b>: {{ rec.created_at }}
 </p>
 
 <h3>요약</h3>
-<p>{{ rec.summary or '요약 없음' }}</p>
+{% if quality %}
+  {# LLM에서 온 review_summary 우선 사용 #}
+  <p>{{ quality.review_summary }}</p>
+{% else %}
+  {# LLM 정보 없으면 DB에 저장된 summary 사용 #}
+  <p>{{ rec.summary or '요약 없음' }}</p>
+{% endif %}
 
 <h3>점수</h3>
-<ul>
-  <li>global_score: {{ rec.scores.global_score if rec.scores else '-' }}</li>
-  <li>model_score: {{ rec.scores.model_score if rec.scores else '-' }}</li>
-  <li>efficiency_index: {{ rec.scores.efficiency_index if rec.scores else '-' }}</li>
-</ul>
 
-<h3>카테고리</h3>
+{% if quality %}
+  {# 🔥 LLM JSON → LLMQualityResponse 기준으로 출력 #}
+  <ul>
+    <li>quality_score: {{ quality.quality_score }}</li>
+    <li>bug: {{ quality.scores_by_category.bug }}</li>
+    <li>performance: {{ quality.scores_by_category.performance }}</li>
+    <li>maintainability: {{ quality.scores_by_category.maintainability }}</li>
+    <li>style: {{ quality.scores_by_category.style }}</li>
+    <li>docs: {{ quality.scores_by_category.docs }}</li>
+    <li>dependency: {{ quality.scores_by_category.dependency }}</li>
+    <li>security: {{ quality.scores_by_category.security }}</li>
+    <li>testing: {{ quality.scores_by_category.testing }}</li>
+  </ul>
+{% else %}
+  {# LLMQualityResponse 못 만들었을 때 기존 rec 필드 fallback #}
+  <ul>
+    <li>quality_score: {{ rec.quality_score }}</li>
+    <li>bug: {{ rec.score_bug }}</li>
+    <li>performance: {{ rec.score_performance }}</li>
+    <li>maintainability: {{ rec.score_maintainability }}</li>
+    <li>style: {{ rec.score_style }}</li>
+    <li>docs: {{ rec.score_docs }}</li>
+    <li>dependency: {{ rec.score_dependency }}</li>
+    <li>security: {{ rec.score_security }}</li>
+    <li>testing: {{ rec.score_testing }}</li>
+  </ul>
+{% endif %}
+
+<h3>카테고리별 코멘트</h3>
 <table>
   <thead>
-    <tr><th>name</th><th>score</th><th>comment</th></tr>
+    <tr>
+      <th>category</th>
+      <th>score</th>
+      <th>comment</th>
+    </tr>
   </thead>
   <tbody>
-    {% for c in rec.categories or [] %}
-      <tr>
-        <td>{{ c.name }}</td>
-        <td>{{ c.score }}</td>
-        <td>{{ c.comment }}</td>
-      </tr>
+    {% if category_rows %}
+      {# 🔥 ui.py에서 build_category_rows 로 만든 8줄 #}
+      {% for row in category_rows %}
+        <tr>
+          <td>{{ row.category }}</td>
+          <td>{{ row.score }}</td>
+          <td>{{ row.comment }}</td>
+        </tr>
+      {% endfor %}
     {% else %}
-      <tr><td colspan="3" style="text-align:center;">카테고리 없음</td></tr>
-    {% endfor %}
+      {# fallback: 기존 rec.* 코멘트 사용 #}
+      <tr>
+        <td>bug</td>
+        <td>{{ rec.score_bug }}</td>
+        <td>{{ rec.comment_bug or '-' }}</td>
+      </tr>
+      <tr>
+        <td>performance</td>
+        <td>{{ rec.score_performance }}</td>
+        <td>{{ rec.comment_performance or '-' }}</td>
+      </tr>
+      <tr>
+        <td>maintainability</td>
+        <td>{{ rec.score_maintainability }}</td>
+        <td>{{ rec.comment_maintainability or '-' }}</td>
+      </tr>
+      <tr>
+        <td>style</td>
+        <td>{{ rec.score_style }}</td>
+        <td>{{ rec.comment_style or '-' }}</td>
+      </tr>
+      <tr>
+        <td>docs</td>
+        <td>{{ rec.score_docs }}</td>
+        <td>{{ rec.comment_docs or '-' }}</td>
+      </tr>
+      <tr>
+        <td>dependency</td>
+        <td>{{ rec.score_dependency }}</td>
+        <td>{{ rec.comment_dependency or '-' }}</td>
+      </tr>
+      <tr>
+        <td>security</td>
+        <td>{{ rec.score_security }}</td>
+        <td>{{ rec.comment_security or '-' }}</td>
+      </tr>
+      <tr>
+        <td>testing</td>
+        <td>{{ rec.score_testing }}</td>
+        <td>{{ rec.comment_testing or '-' }}</td>
+      </tr>
+    {% endif %}
   </tbody>
 </table>
-
-<h3>메타 정보</h3>
-<ul>
-  <li>request_hash: <code>{{ rec.request_hash }}</code></li>
-  <li>code_fingerprint: <code>{{ rec.code_fingerprint }}</code></li>
-  {% if rec.result_ref %}
-    <li>result_ref: {{ rec.result_ref }}</li>
-  {% endif %}
-  {% if rec.error_message %}
-    <li style="color:#c00;">error_message: {{ rec.error_message }}</li>
-  {% endif %}
-</ul>
 
 <p style="margin-top:16px;">
   <a href="/ui/review/{{ rec.id }}/logs">액션 로그 보기</a>

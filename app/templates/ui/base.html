@@ -19,12 +19,34 @@
 <body>
 <header>
   <h1 style="margin:0;">Review Test UI</h1>
-  <nav style="display:flex;gap:8px;">
-    <a class="button" href="/ui/review">작성</a>
-    <a class="button" href="/ui/reviews">목록</a>
-    <a class="button" href="/ui/api-test">API 테스트</a>
-  </nav>
+
+  <div style="display:flex;align-items:center;gap:12px;">
+    {% if current_user_login %}
+      <span style="font-size:14px;color:#333;">
+        {{ current_user_login }} (id: {{ current_user_id }})
+      </span>
+    {% else %}
+      <span style="font-size:14px;color:#999;">
+        게스트
+      </span>
+    {% endif %}
+
+    <nav style="display:flex;gap:8px;">
+      <a class="button" href="/ui/review">작성</a>
+      <a class="button" href="/ui/reviews">목록</a>
+      <a class="button" href="/ui/api-test">API 테스트</a>
+
+      {% if current_user_login %}
+        <!-- 로그인 상태: 로그아웃 버튼 -->
+        <a class="button" href="/auth/github/logout">로그아웃</a>
+      {% else %}
+        <!-- 비로그인 상태: GitHub 로그인 버튼 -->
+        <a class="button" href="/auth/github/login">GitHub 로그인</a>
+      {% endif %}
+    </nav>
+  </div>
 </header>
+
 {% block content %}{% endblock %}
 </body>
 </html>

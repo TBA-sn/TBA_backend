@@ -5,10 +5,17 @@
 <h2>API 통합 테스트</h2>
 
 <form method="post" action="/ui/api-test" style="display:grid;gap:12px;max-width:900px;">
-  <div style="display:grid;grid-template-columns:160px 1fr;gap:8px;align-items:center;">
-    <label>user_id</label>
-    <input type="number" name="user_id" placeholder="예: 1" required />
-  </div>
+  {% if current_user_login %}
+    <div style="font-size:14px;">
+      현재 로그인: <b>{{ current_user_login }}</b> (id: {{ current_user_id }})
+    </div>
+    <input type="hidden" name="user_id" value="{{ current_user_id }}" />
+  {% else %}
+    <div style="display:grid;grid-template-columns:160px 1fr;gap:8px;align-items:center;">
+      <label>user_id</label>
+      <input type="number" name="user_id" placeholder="예: 1" />
+    </div>
+  {% endif %}
 
   <div style="display:grid;grid-template-columns:160px 1fr;gap:8px;align-items:center;">
     <label>model_id</label>
@@ -39,7 +46,7 @@
   <input
     type="text"
     name="criteria"
-    value="유지보수성,가독성,확장성,유연성,간결성,재사용성,테스트 용이성"
+    value=""
   />
 
   <details style="margin-top:8px;">
