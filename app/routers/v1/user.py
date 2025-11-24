@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.utils.database import get_session
 from app.models.user import User
 from app.schemas.user import UserCreate, UserOut
+from app.routers.auth import get_current_user_id_from_cookie
 
 router = APIRouter(prefix="/v1/users", tags=["user"])
 
@@ -25,3 +26,13 @@ async def create_user(payload: UserCreate, session: AsyncSession = Depends(get_s
 async def list_users(session: AsyncSession = Depends(get_session)):
     rows = (await session.execute(select(User).order_by(User.created_at.desc()))).scalars().all()
     return rows
+
+@router.get("/me", response_model=UserOut)
+async def get_me(
+    session: AsyncSession = Depends(get_session),
+    user_id: int = Depends(get_current_user_id_from_cookie),
+):
+    user = await session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+    return user

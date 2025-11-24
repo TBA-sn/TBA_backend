@@ -15,13 +15,11 @@ class UserCreate(BaseModel):
     name: Optional[str] = None
     avatar_url: Optional[str] = None
 
-class UserOut(UserBase):
+class UserOut(BaseModel):
     id: int
-    created_at: Optional[datetime] = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
+    login: str
+    name: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 
 # 사랑해

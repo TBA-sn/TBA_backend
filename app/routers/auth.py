@@ -85,10 +85,7 @@ def get_current_user_id(request: Request) -> int:
 
 
 def get_current_user_id_from_cookie(request: Request) -> int:
-    """
-    UI용: Authorization 헤더 또는 쿠키(access_token) 둘 다 지원
-    (UI에서는 주로 쿠키로 들어옴)
-    """
+    
     auth = request.headers.get("Authorization", "")
     token = None
 
