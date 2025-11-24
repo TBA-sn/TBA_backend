@@ -1,4 +1,5 @@
 # app/routers/auth.py
+import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -17,11 +18,15 @@ from app.services.auth import (
 
 router = APIRouter(prefix="/auth/github", tags=["auth"])
 
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
 
 @router.get("/login")
 async def gh_login(state: str = "native"):
     """
-    GitHub 로그인 시작: 바로 GitHub authorize URL로 리다이렉트
+    GitHub 로그인 시작
+    - state="native": 백엔드 UI(/ui/reviews)에서 사용하는 로그인
+    - state="web": 프론트엔드에서 사용하는 로그인 (로그인 후 프론트로 리다이렉트)
     """
     url = github_login_url(state)
     return RedirectResponse(url=url, status_code=303)
@@ -37,7 +42,9 @@ async def gh_callback(
     GitHub OAuth 콜백
     - GitHub access_token 교환
     - /user 정보 가져와서 User 테이블 upsert
-    - JWT 발급해서 access_token 쿠키에 심고 /ui/reviews로 리다이렉트
+    - JWT 발급
+      * state="native"  → access_token 쿠키에 심고 /ui/reviews로 리다이렉트
+      * state!="native" → FRONTEND_URL/auth/github/callback?token=... 로 리다이렉트
     """
     access_token = await exchange_code_for_token(code)
     me = await fetch_github_me(access_token)
@@ -59,24 +66,24 @@ async def gh_callback(
 
     token = create_jwt(user.id)
 
-    # 로그인 후 리뷰 목록으로 이동
-    resp = RedirectResponse(url="/ui/reviews", status_code=303)
-    resp.set_cookie(
-        key="access_token",
-        value=token,
-        httponly=True,
-        samesite="lax",
-        secure=False,  # HTTPS 붙이면 True로 바꾸셈
-        max_age=60 * 60 * 24 * 7,
-        path="/",
-    )
-    return resp
+    if state == "native":
+        resp = RedirectResponse(url="/ui/reviews", status_code=303)
+        resp.set_cookie(
+            key="access_token",
+            value=token,
+            httponly=True,
+            samesite="lax",
+            secure=False,
+            max_age=60 * 60 * 24 * 7,
+            path="/",
+        )
+        return resp
+
+    redirect_url = f"{FRONTEND_URL}/auth/github/callback?token={token}"
+    return RedirectResponse(url=redirect_url, status_code=303)
 
 
 def get_current_user_id(request: Request) -> int:
-    """
-    순수 Bearer 토큰만 쓰는 API용 의존성
-    """
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         raise HTTPException(401, "missing bearer token")
@@ -85,7 +92,9 @@ def get_current_user_id(request: Request) -> int:
 
 
 def get_current_user_id_from_cookie(request: Request) -> int:
-    
+    """
+    Authorization 헤더의 Bearer 토큰 또는 access_token 쿠키에서 user_id 추출
+    """
     auth = request.headers.get("Authorization", "")
     token = None
 
@@ -104,10 +113,6 @@ def get_current_user_id_from_cookie(request: Request) -> int:
 @router.get("/logout")
 @router.post("/logout")
 async def logout():
-    """
-    로그아웃: access_token 쿠키 삭제 후 리스트로 리다이렉트
-    GET/POST 둘 다 허용
-    """
     resp = RedirectResponse(url="/ui/reviews", status_code=303)
     resp.delete_cookie("access_token", path="/")
     return resp
@@ -115,7 +120,4 @@ async def logout():
 
 @router.get("/debug/mint")
 def mint_debug_token(user_id: int):
-    """
-    내부 디버그용: 임의 user_id로 토큰 발급
-    """
     return {"token": create_jwt(user_id)}
