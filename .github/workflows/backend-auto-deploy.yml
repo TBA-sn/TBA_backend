@@ -59,7 +59,7 @@ jobs:
       # 7) EC2에서 서버 재시작
       - name: SSH to EC2 and restart backend
         uses: appleboy/ssh-action@v1.0.3
-        continue-on-error: true
+        # continue-on-error: true
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
@@ -69,6 +69,7 @@ jobs:
           timeout: 60m
           command_timeout: 30m
           script: |
+            set -euo pipefail
             cd ${{ secrets.EC2_APP_PATH }}
 
             if [ ! -d ".venv" ]; then
@@ -79,11 +80,13 @@ jobs:
 
             pip install -U pip
             pip install -r requirements.txt
-
+            alembic upgrade head
             # 기존 uvicorn 종료
-            pkill -f "uvicorn app.main:app" || true
+            sudo fuser -k 8000/tcp || true
+
 
             # 새 서버 백그라운드 실행
             nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
-
+            sleep 3
+            pgrep -af uvicorn || (echo "uvicorn not running" && exit 1)
             echo "EC2 backend restart completed"
