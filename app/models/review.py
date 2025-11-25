@@ -17,8 +17,8 @@ from app.utils.database import Base
 class Review(Base):
     __tablename__ = "review"
 
-    id = Column(BigInteger, primary_key=True, index=True)
-    user_id = Column(BigInteger, ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     model = Column(String(255), nullable=False)      # 사용한 LLM 모델 이름
     trigger = Column(String(50), nullable=False)     # 'manual', 'save', 'commit' 등
@@ -30,23 +30,15 @@ class Review(Base):
 
     # scores_by_category (8개로 확장)
     score_bug = Column(Integer, nullable=False)
-    score_performance = Column(Integer, nullable=False)
     score_maintainability = Column(Integer, nullable=False)
     score_style = Column(Integer, nullable=False)
-    score_docs = Column(Integer, nullable=False)
-    score_dependency = Column(Integer, nullable=False)
     score_security = Column(Integer, nullable=False)
-    score_testing = Column(Integer, nullable=False)
 
     # 카테고리별 코멘트 (선택)
     comment_bug = Column(Text, nullable=True)
-    comment_performance = Column(Text, nullable=True)
     comment_maintainability = Column(Text, nullable=True)
     comment_style = Column(Text, nullable=True)
-    comment_docs = Column(Text, nullable=True)
-    comment_dependency = Column(Text, nullable=True)
     comment_security = Column(Text, nullable=True)
-    comment_testing = Column(Text, nullable=True)
 
     status = Column(String(20), nullable=False, default="done")  # 'done', 'processing' 등
 

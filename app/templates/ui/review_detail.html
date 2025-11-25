@@ -29,26 +29,18 @@
   <ul>
     <li>quality_score: {{ quality.quality_score }}</li>
     <li>bug: {{ quality.scores_by_category.bug }}</li>
-    <li>performance: {{ quality.scores_by_category.performance }}</li>
     <li>maintainability: {{ quality.scores_by_category.maintainability }}</li>
     <li>style: {{ quality.scores_by_category.style }}</li>
-    <li>docs: {{ quality.scores_by_category.docs }}</li>
-    <li>dependency: {{ quality.scores_by_category.dependency }}</li>
     <li>security: {{ quality.scores_by_category.security }}</li>
-    <li>testing: {{ quality.scores_by_category.testing }}</li>
   </ul>
 {% else %}
   {# LLMQualityResponse 못 만들었을 때 기존 rec 필드 fallback #}
   <ul>
     <li>quality_score: {{ rec.quality_score }}</li>
     <li>bug: {{ rec.score_bug }}</li>
-    <li>performance: {{ rec.score_performance }}</li>
     <li>maintainability: {{ rec.score_maintainability }}</li>
     <li>style: {{ rec.score_style }}</li>
-    <li>docs: {{ rec.score_docs }}</li>
-    <li>dependency: {{ rec.score_dependency }}</li>
     <li>security: {{ rec.score_security }}</li>
-    <li>testing: {{ rec.score_testing }}</li>
   </ul>
 {% endif %}
 
@@ -79,11 +71,6 @@
         <td>{{ rec.comment_bug or '-' }}</td>
       </tr>
       <tr>
-        <td>performance</td>
-        <td>{{ rec.score_performance }}</td>
-        <td>{{ rec.comment_performance or '-' }}</td>
-      </tr>
-      <tr>
         <td>maintainability</td>
         <td>{{ rec.score_maintainability }}</td>
         <td>{{ rec.comment_maintainability or '-' }}</td>
@@ -93,25 +80,9 @@
         <td>{{ rec.score_style }}</td>
         <td>{{ rec.comment_style or '-' }}</td>
       </tr>
-      <tr>
-        <td>docs</td>
-        <td>{{ rec.score_docs }}</td>
-        <td>{{ rec.comment_docs or '-' }}</td>
-      </tr>
-      <tr>
-        <td>dependency</td>
-        <td>{{ rec.score_dependency }}</td>
-        <td>{{ rec.comment_dependency or '-' }}</td>
-      </tr>
-      <tr>
         <td>security</td>
         <td>{{ rec.score_security }}</td>
         <td>{{ rec.comment_security or '-' }}</td>
-      </tr>
-      <tr>
-        <td>testing</td>
-        <td>{{ rec.score_testing }}</td>
-        <td>{{ rec.comment_testing or '-' }}</td>
       </tr>
     {% endif %}
   </tbody>

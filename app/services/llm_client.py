@@ -6,7 +6,7 @@ from typing import Dict, Any
 import httpx
 
 from app.schemas.review import LLMRequest, LLMQualityResponse, ScoresByCategory
-from app.routers.ws_debug import ws_manager  # WebSocket manager
+from app.routers.ws_debug import ws_manager
 
 logger = logging.getLogger(__name__)
 
@@ -57,13 +57,9 @@ async def review_code(llm_req: LLMRequest) -> LLMQualityResponse:
         raw_scores = data.get("scores_by_category") or {}
         scores = ScoresByCategory(
             bug=int(raw_scores.get("bug", 0)),
-            performance=int(raw_scores.get("performance", 0)),
             maintainability=int(raw_scores.get("maintainability", 0)),
             style=int(raw_scores.get("style", 0)),
-            docs=int(raw_scores.get("docs", 0)),
-            dependency=int(raw_scores.get("dependency", 0)),
             security=int(raw_scores.get("security", 0)),
-            testing=int(raw_scores.get("testing", 0)),
         )
 
         raw_details = data.get("review_details") or {}

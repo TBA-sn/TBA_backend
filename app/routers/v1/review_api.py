@@ -26,13 +26,9 @@ async def review_endpoint(payload: ReviewAPIRequest) -> ReviewAPIResponse:
         model=None,
         criteria=[
             "Bug",
-            "Performance",
             "Maintainability",
             "Style",
-            "Docs",
-            "Dependency",
             "Security",
-            "Testing",
         ],
     )
 
@@ -41,13 +37,9 @@ async def review_endpoint(payload: ReviewAPIRequest) -> ReviewAPIResponse:
     s: ScoresByCategory = llm_res.scores_by_category
     scores_by_category: Dict[str, float] = {
         "bug": float(s.bug),
-        "performance": float(s.performance),
         "maintainability": float(s.maintainability),
         "style": float(s.style),
-        "docs": float(s.docs),
-        "dependency": float(s.dependency),
         "security": float(s.security),
-        "testing": float(s.testing),
     }
 
     review_details_list: List[LLMReviewDetail] = []
