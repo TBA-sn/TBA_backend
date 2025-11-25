@@ -18,16 +18,19 @@ from app.services.auth import (
 
 router = APIRouter(prefix="/auth/github", tags=["auth"])
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+# ✅ FRONTEND_URL 끝에 / 안 붙게 정리
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
 
 @router.get("/login")
-async def gh_login(state: str = "native"):
+async def gh_login(state: str = "web"):
     """
     GitHub 로그인 시작
     - state="native": 백엔드 UI(/ui/reviews)에서 사용하는 로그인
     - state="web": 프론트엔드에서 사용하는 로그인 (로그인 후 프론트로 리다이렉트)
+    - 그 외: 기본적으로 프론트 플로우로 처리
     """
+    # ✅ 여기서 받은 state를 그대로 GitHub authorize URL에 실어 보냄
     url = github_login_url(state)
     return RedirectResponse(url=url, status_code=303)
 
@@ -46,9 +49,13 @@ async def gh_callback(
       * state="native"  → access_token 쿠키에 심고 /ui/reviews로 리다이렉트
       * state!="native" → FRONTEND_URL/auth/github/callback?token=... 로 리다이렉트
     """
+    # 1) GitHub access_token 교환
     access_token = await exchange_code_for_token(code)
+
+    # 2) /user 정보 가져오기
     me = await fetch_github_me(access_token)
 
+    # 3) User 테이블 upsert
     q = await session.execute(select(User).where(User.github_id == str(me["id"])))
     user = q.scalar_one_or_none()
 
@@ -64,9 +71,12 @@ async def gh_callback(
 
     await session.commit()
 
+    # 4) JWT 발급
     token = create_jwt(user.id)
 
+    # 🔀 분기: native ↔ web
     if state == "native":
+        # ✅ 백엔드 UI에서 쓰는 로그인 플로우
         resp = RedirectResponse(url="/ui/reviews", status_code=303)
         resp.set_cookie(
             key="access_token",
@@ -79,6 +89,7 @@ async def gh_callback(
         )
         return resp
 
+    # ✅ 그 외(state="web", "signup" 등)는 모두 프론트로 리다이렉트
     redirect_url = f"{FRONTEND_URL}/auth/github/callback?token={token}"
     return RedirectResponse(url=redirect_url, status_code=303)
 
@@ -113,6 +124,7 @@ def get_current_user_id_from_cookie(request: Request) -> int:
 @router.get("/logout")
 @router.post("/logout")
 async def logout():
+    # 이건 백엔드 UI(/ui/reviews)용 로그아웃
     resp = RedirectResponse(url="/ui/reviews", status_code=303)
     resp.delete_cookie("access_token", path="/")
     return resp
