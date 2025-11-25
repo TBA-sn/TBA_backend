@@ -47,7 +47,7 @@ async def gh_callback(
     - /user 정보 가져와서 User 테이블 upsert
     - JWT 발급
       * state="native"  → access_token 쿠키에 심고 /ui/reviews로 리다이렉트
-      * state!="native" → FRONTEND_URL/auth/github/callback?token=... 로 리다이렉트
+      * state!="native" → FRONTEND_URL/auth/github/callback?token=...&status=new|existing 으로 리다이렉트
     """
     # 1) GitHub access_token 교환
     access_token = await exchange_code_for_token(code)
@@ -55,11 +55,13 @@ async def gh_callback(
     # 2) /user 정보 가져오기
     me = await fetch_github_me(access_token)
 
-    # 3) User 테이블 upsert
+    # 3) User 테이블 upsert + 신규/기존 여부 판단
     q = await session.execute(select(User).where(User.github_id == str(me["id"])))
     user = q.scalar_one_or_none()
 
+    is_new_user = False
     if not user:
+        is_new_user = True
         user = User(
             github_id=str(me["id"]),
             login=me.get("login", ""),
@@ -71,7 +73,7 @@ async def gh_callback(
 
     await session.commit()
 
-    # 4) JWT 발급
+    # 4) JWT 발급 (sub = user.id)
     token = create_jwt(user.id)
 
     # 🔀 분기: native ↔ web
@@ -90,7 +92,10 @@ async def gh_callback(
         return resp
 
     # ✅ 그 외(state="web", "signup" 등)는 모두 프론트로 리다이렉트
-    redirect_url = f"{FRONTEND_URL}/auth/github/callback?token={token}"
+    #    - status=new      : 처음 가입한 GitHub 계정
+    #    - status=existing : 이미 DKMV에 존재하는 GitHub 계정
+    status = "new" if is_new_user else "existing"
+    redirect_url = f"{FRONTEND_URL}/auth/github/callback?token={token}&status={status}"
     return RedirectResponse(url=redirect_url, status_code=303)
 
 
