@@ -63,13 +63,9 @@ class IssueSeverity(str, Enum):
 
 class Category(str, Enum):
     BUG = "Bug"
-    PERFORMANCE = "Performance"
     MAINTAINABILITY = "Maintainability"
     STYLE = "Style"
-    DOCS = "Docs"
-    DEPENDENCY = "Dependency"
     SECURITY = "Security"
-    TESTING = "Testing"
 
 
 class LLMReviewDetail(BaseModel):
@@ -487,13 +483,9 @@ class ScoresByCategory(BaseModel):
     8개 카테고리별 점수. 안 온 건 0으로 기본값 처리.
     """
     bug: int = 0
-    performance: int = 0
     maintainability: int = 0
     style: int = 0
-    docs: int = 0
-    dependency: int = 0
     security: int = 0
-    testing: int = 0
 
 
 class LLMQualityResponse(BaseModel):
