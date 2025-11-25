@@ -1,89 +1,56 @@
-# app/main.py
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
-import logging
-import os
+import os, time, jwt, httpx
+from typing import Any, Dict
 
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
-from app.routers.v1.review import router as review_router
-from app.routers.v1.user import router as user_router
-from app.routers.ui import router as ui_router
-from app.routers.v1.action_log import router as action_log_router
-from app.routers.llm import router as llm_router
-from app.routers.ws_debug import router as ws_debug_router
-from app.routers.v1.review_api import router as review_api_router
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "")
+GITHUB_REDIRECT = os.getenv("GITHUB_REDIRECT", "http://18.205.229.159:3000/auth/github/callback")
+JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")
 
-# ❌ 옛날 라우터 import 하지 않기
-# from app.auth.github import router as gh_router
+def github_login_url(state: str = "native") -> str:
+    base = "https://github.com/login/oauth/authorize"
+    params = {
+        "client_id": GITHUB_CLIENT_ID,
+        "redirect_uri": GITHUB_REDIRECT,
+        "scope": "read:user user:email",
+        "state": state,
+        "allow_signup": "true",
+    }
+    from urllib.parse import urlencode
+    return f"{base}?{urlencode(params)}"
 
-# ✅ 새 auth 라우터만 사용
-from app.routers.auth import router as auth_router
+async def exchange_code_for_token(code: str) -> str:
+    if not GITHUB_CLIENT_SECRET:
+        raise RuntimeError("GITHUB_CLIENT_SECRET missing")
+    url = "https://github.com/login/oauth/access_token"
+    payload = {
+        "client_id": GITHUB_CLIENT_ID,
+        "client_secret": GITHUB_CLIENT_SECRET,
+        "code": code,
+        "redirect_uri": GITHUB_REDIRECT,
+    }
+    async with httpx.AsyncClient() as client:
+        r = await client.post(url, headers={"Accept": "application/json"}, json=payload)
+        r.raise_for_status()
+        data = r.json()
+        if "error" in data:
+            raise RuntimeError(data.get("error_description") or "github oauth error")
+        return data["access_token"]
 
-app = FastAPI(
-    title="Code Review API",
-    version="0.1.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
-)
+async def fetch_github_me(access_token: str) -> Dict[str, Any]:
+    async with httpx.AsyncClient() as client:
+        r = await client.get("https://api.github.com/user",
+                             headers={"Authorization": f"Bearer {access_token}",
+                                      "Accept": "application/vnd.github+json"})
+        r.raise_for_status()
+        return r.json()
 
-origins = os.getenv(
-    "CORS_ALLOW_ORIGINS",
-    "http://localhost:3000,https://web-dkmv.vercel.app/"
-).split(",")
+def create_jwt(user_id: int) -> str:
+    payload = {"sub": str(user_id), "iat": int(time.time())}
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[o.strip() for o in origins if o.strip()],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.include_router(llm_router)
-app.include_router(review_router)
-app.include_router(action_log_router)
-app.include_router(review_api_router)
-app.include_router(ws_debug_router)
-
-# ❌ 완전히 제거
-# app.include_router(gh_router)
-
-# ✅ 새 auth 라우터만 등록
-app.include_router(auth_router)
-logging.getLogger("uvicorn.error").info("Auth router enabled.")
-
-app.include_router(user_router)
-app.include_router(ui_router)
-
-
-@app.get("/", include_in_schema=False)
-def root():
-    return RedirectResponse(url="/ui/reviews", status_code=303)
-
-
-@app.get("/health", tags=["meta"])
-def health():
-    return {"ok": True, "service": "code-review-api"}
-
-
-@app.exception_handler(HTTPException)
-async def custom_http_exception_handler(request: Request, exc: HTTPException):
-    wants_html = "text/html" in (request.headers.get("accept") or "")
-
-    if exc.status_code == 401 and wants_html:
-        # ✅ 백엔드 UI에서 401 날 때는 native 플로우로
-        return RedirectResponse(url="/auth/github/login?state=native", status_code=303)
-
-    if exc.status_code == 403 and wants_html:
-        return HTMLResponse("<h3>접근 권한이 없습니다.</h3>", status_code=403)
-
-    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+def decode_jwt(token: str) -> Dict[str, Any]:
+    return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
