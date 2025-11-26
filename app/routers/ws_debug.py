@@ -30,25 +30,17 @@ class WebSocketManager:
             try:
                 await conn.send_text(data)
             except Exception:
-                # 끊긴 연결은 리스트에서 제거
                 to_remove.append(conn)
 
         for conn in to_remove:
             self.disconnect(conn)
 
 
-# 여기 이 인스턴스를 외부에서 import 해서 씀
 ws_manager = WebSocketManager()
 
 
 @router.websocket("/ws/debug")
 async def ws_debug_endpoint(websocket: WebSocket):
-    """
-    /ws/debug WebSocket 엔드포인트
-
-    - 클라이언트가 보내는 텍스트 메시지를 받아서
-      그대로 모든 클라이언트에게 브로드캐스트(echo) 해 줌.
-    """
     await ws_manager.connect(websocket)
 
     # 새 클라이언트 접속 브로드캐스트 (옵션)

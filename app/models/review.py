@@ -20,27 +20,24 @@ class Review(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
-    model = Column(String(255), nullable=False)      # 사용한 LLM 모델 이름
-    trigger = Column(String(50), nullable=False)     # 'manual', 'save', 'commit' 등
-    language = Column(String(50), nullable=True)     # 'python', 'typescript' 등
+    model = Column(String(255), nullable=False)
+    trigger = Column(String(50), nullable=False)
+    language = Column(String(50), nullable=True)
 
-    # ===== 점수 & 요약 =====
-    quality_score = Column(Integer, nullable=False)  # 0~100 (전체 품질 점수)
-    summary = Column(Text, nullable=False)           # review_summary
+    quality_score = Column(Integer, nullable=False)
+    summary = Column(Text, nullable=False)
 
-    # scores_by_category (8개로 확장)
     score_bug = Column(Integer, nullable=False)
     score_maintainability = Column(Integer, nullable=False)
     score_style = Column(Integer, nullable=False)
     score_security = Column(Integer, nullable=False)
 
-    # 카테고리별 코멘트 (선택)
     comment_bug = Column(Text, nullable=True)
     comment_maintainability = Column(Text, nullable=True)
     comment_style = Column(Text, nullable=True)
     comment_security = Column(Text, nullable=True)
 
-    status = Column(String(20), nullable=False, default="done")  # 'done', 'processing' 등
+    status = Column(String(20), nullable=False, default="done")
 
     created_at = Column(
         DateTime(timezone=True),
@@ -72,9 +69,9 @@ class ReviewDetail(Base):
         index=True,
     )
 
-    issue_id = Column(String(50), nullable=True)          # "E501", "B101" 등
-    issue_category = Column(String(100), nullable=False)  # "line_too_long" 등
-    issue_severity = Column(String(10), nullable=False)   # "HIGH", "MEDIUM", "LOW"
+    issue_id = Column(String(50), nullable=True)
+    issue_category = Column(String(100), nullable=False)
+    issue_severity = Column(String(10), nullable=False)
 
     issue_summary = Column(String(255), nullable=False)
     issue_details = Column(Text, nullable=True)

@@ -8,7 +8,6 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# --- 라우터 ---
 from app.routers.v1.review import router as review_router
 from app.routers.v1.user import router as user_router
 from app.routers.ui import router as ui_router
@@ -17,7 +16,6 @@ from app.routers.llm import router as llm_router
 from app.routers.ws_debug import router as ws_debug_router
 from app.routers.v1.review_api import router as review_api_router
 
-# 🔥 새 OAuth 라우터만 사용하기
 from app.routers.auth import router as auth_router
 
 
@@ -29,9 +27,6 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-# -------------------------------------------------------
-#   CORS — Vercel 배포 주소 포함 (정답)
-# -------------------------------------------------------
 origins = os.getenv(
     "CORS_ALLOW_ORIGINS",
     "http://localhost:3000,"
@@ -48,20 +43,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -------------------------
-# 라우터 등록
-# -------------------------
+
 app.include_router(llm_router)
 app.include_router(review_router)
 app.include_router(action_log_router)
 app.include_router(review_api_router)
 app.include_router(ws_debug_router)
-
-# ❌ 절대 사용 금지: 옛날 GitHub OAuth 라우터
-# from app.auth.github import router as gh_router
-# app.include_router(gh_router)
-
-# 🔥 새 OAuth 라우터 (state=web 기반)만 등록
 app.include_router(auth_router)
 logging.getLogger("uvicorn.error").info("Auth router enabled.")
 
@@ -69,9 +56,6 @@ app.include_router(user_router)
 app.include_router(ui_router)
 
 
-# -------------------------
-# Root
-# -------------------------
 @app.get("/", include_in_schema=False)
 def root():
     return RedirectResponse(url="/ui/reviews", status_code=303)
@@ -82,14 +66,10 @@ def health():
     return {"ok": True, "service": "code-review-api"}
 
 
-# -------------------------
-# API 에러 핸들러
-# -------------------------
 @app.exception_handler(HTTPException)
 async def custom_http_exception_handler(request: Request, exc: HTTPException):
     wants_html = "text/html" in (request.headers.get("accept") or "")
 
-    # 백엔드 UI가 접근 중 401이면 native OAuth 플로우
     if exc.status_code == 401 and wants_html:
         return RedirectResponse(
             url="/auth/github/login?state=native",
