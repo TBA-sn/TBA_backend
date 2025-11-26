@@ -22,13 +22,34 @@ router = APIRouter(prefix="/auth/github", tags=["auth"])
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
 
+def parse_state(raw_state: str):
+    """
+    raw_state 예:
+      - "web:http://localhost:3000"
+      - "signup:https://web-dkmv.vercel.app"
+      - "extension:https://web-dkmv.vercel.app"
+      - "native"
+    """
+    if not raw_state:
+        return "web", None
+
+    if ":" not in raw_state:
+        # 예: "native"
+        return raw_state, None
+
+    flow, origin = raw_state.split(":", 1)
+    return flow, origin
+
+
 @router.get("/login")
 async def gh_login(state: str = "web"):
     """
     GitHub 로그인 시작
     - state="native": 백엔드 UI(/ui/reviews)에서 사용하는 로그인
-    - 그 외: 프론트엔드에서 사용하는 로그인 (state에 flow + origin 이 들어올 수 있음)
-      예) "web:http://localhost:3000", "signup:https://web-dkmv.vercel.app"
+    - 그 외: 프론트엔드/익스텐션에서 사용하는 로그인
+      예) "web:http://localhost:3000",
+          "signup:https://web-dkmv.vercel.app",
+          "extension:https://web-dkmv.vercel.app"
     """
     # ✅ 여기서 받은 state를 그대로 GitHub authorize URL에 실어 보냄
     url = github_login_url(state)
@@ -46,9 +67,13 @@ async def gh_callback(
     - GitHub access_token 교환
     - /user 정보 가져와서 User 테이블 upsert
     - JWT 발급
-      * state="native"  → access_token 쿠키에 심고 /ui/reviews로 리다이렉트
-      * 그 외           → (state에 담긴 origin 기준) /auth/github/callback?token=...&status=... 으로 리다이렉트
+      * flow="native"    → access_token 쿠키에 심고 /ui/reviews로 리다이렉트
+      * flow="web/..."   → 프론트엔드 /auth/github/callback?token=...&status=...
+      * flow="extension" → vscode://rockcha.dkmv/callback?token=... 으로 리다이렉트
     """
+    # 0) state 파싱
+    flow, origin = parse_state(state)
+
     # 1) GitHub access_token 교환
     access_token = await exchange_code_for_token(code)
 
@@ -76,9 +101,10 @@ async def gh_callback(
     # 4) JWT 발급 (sub = user.id)
     token = create_jwt(user.id)
 
-    # 🔀 분기: native ↔ web 계열
-    if state == "native":
-        # ✅ 백엔드 UI에서 쓰는 로그인 플로우
+    # ─────────────────────────────
+    # 4-1) 백엔드 UI(native) 플로우
+    # ─────────────────────────────
+    if flow == "native":
         resp = RedirectResponse(url="/ui/reviews", status_code=303)
         resp.set_cookie(
             key="access_token",
@@ -91,31 +117,30 @@ async def gh_callback(
         )
         return resp
 
-    # ----------------------------
-    # ✅ 프론트 플로우 (web / signup 등)
-    #    state 예시:
-    #      - "web:http://localhost:3000"
-    #      - "web:https://web-dkmv.vercel.app"
-    #      - "signup:http://localhost:3000"
-    #    혹시 예전 방식 ("web") 이 들어오면 FRONTEND_URL로 fallback
-    # ----------------------------
+    # ─────────────────────────────
+    # 4-2) VS Code extension 플로우
+    #   → vscode://rockcha.dkmv/callback?token=...
+    # ─────────────────────────────
+    if flow == "extension":
+        vs_uri = f"vscode://rockcha.dkmv/callback?token={token}"
+        return RedirectResponse(url=vs_uri, status_code=303)
+
+    # ─────────────────────────────
+    # 4-3) 웹 프론트 플로우 (web / signup 등)
+    # ─────────────────────────────
     frontend_base = FRONTEND_URL  # 기본 fallback
 
-    if state.startswith("web:") or state.startswith("signup:"):
-        # "flow:origin" 형태이므로 ":" 기준으로 나눔
-        try:
-            _, origin = state.split(":", 1)
-            origin = origin.strip()
-            if origin:
-                frontend_base = origin.rstrip("/")
-        except ValueError:
-            # 혹시 이상한 형식이면 그냥 FRONTEND_URL 사용
-            pass
+    # origin 이 들어온 경우만 덮어쓰기
+    if origin:
+        frontend_base = origin.rstrip("/")
 
     #    - status=new      : 처음 가입한 GitHub 계정
     #    - status=existing : 이미 DKMV에 존재하는 GitHub 계정
     status = "new" if is_new_user else "existing"
-    redirect_url = f"{frontend_base}/auth/github/callback?token={token}&status={status}"
+    redirect_url = (
+        f"{frontend_base}/auth/github/callback"
+        f"?token={token}&status={status}"
+    )
     return RedirectResponse(url=redirect_url, status_code=303)
 
 
