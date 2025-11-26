@@ -23,22 +23,22 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
 
 def parse_state(raw_state: str):
-    """
-    raw_state 예:
-      - "web:http://localhost:3000"
-      - "signup:https://web-dkmv.vercel.app"
-      - "extension:https://web-dkmv.vercel.app"
-      - "native"
-    """
-    if not raw_state:
-        return "web", None
+  """
+  raw_state 예:
+    - "web:http://localhost:3000"
+    - "signup:https://web-dkmv.vercel.app"
+    - "extension:https://web-dkmv.vercel.app"
+    - "native"
+  """
+  if not raw_state:
+      return "web", None
 
-    if ":" not in raw_state:
-        # 예: "native"
-        return raw_state, None
+  if ":" not in raw_state:
+      # 예: "native"
+      return raw_state, None
 
-    flow, origin = raw_state.split(":", 1)
-    return flow, origin
+  flow, origin = raw_state.split(":", 1)
+  return flow, origin
 
 
 @router.get("/login")
@@ -120,6 +120,7 @@ async def gh_callback(
     # ─────────────────────────────
     # 4-2) VS Code extension 플로우
     #   → vscode://rockcha.dkmv/callback?token=...
+    #   (지금은 토큰 수동입력 플로우를 쓰지만, 남겨둬도 됨)
     # ─────────────────────────────
     if flow == "extension":
         vs_uri = f"vscode://rockcha.dkmv/callback?token={token}"
@@ -183,3 +184,22 @@ async def logout():
 @router.get("/debug/mint")
 def mint_debug_token(user_id: int):
     return {"token": create_jwt(user_id)}
+
+
+# ✅ VS Code 확장용 토큰 발급 (웹에서 호출)
+@router.post("/vscode/token")
+async def mint_vscode_token(
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    VS Code 확장에서 사용할 JWT 발급용 엔드포인트
+    - 반드시 Authorization: Bearer <token> 헤더로 호출 (웹에서 이미 로그인된 상태)
+    """
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    token = create_jwt(user.id)
+    return {"token": token}
