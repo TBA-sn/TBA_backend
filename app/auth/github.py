@@ -148,15 +148,14 @@ async def debug_mint(user_id: int, session: AsyncSession = Depends(get_session))
         version="v1",
         actor="server",
         code_fingerprint=None,
-        model_id = getattr(meta, "model", None) or "unknown"
-        analysis=None,
-        progress={"status": "done", "next_step": None},
+        model="github-debug",
         result={"result_ref": None, "error_message": None},
         audit={
             "created_at": now,
             "updated_at": now,
         },
     )
+
 
     body = DebugMintBody(
         access_token=access_token,
