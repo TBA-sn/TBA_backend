@@ -14,10 +14,12 @@ class Audit(BaseModel):
 
 
 class Meta(BaseModel):
-    user_id: Optional[int] = None
+    github_id: Optional[str] = None
     review_id: Optional[int] = None
     version: str = "v1"
     actor: str
+    language: str = "python"
+    trigger: str = "manual"
     code_fingerprint: Optional[str] = None
     model: Optional[str] = None
     result: Optional[ResultInfo] = None

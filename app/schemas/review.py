@@ -21,7 +21,6 @@ class ExtensionRequest(BaseModel):
 
 class Snippet(BaseModel):
     code: str
-    language: str
 
 
 class DetectionInfo(BaseModel):
@@ -130,7 +129,6 @@ class ReviewOut(BaseModel):
     user_id: int
     model_id: str
     trigger: str
-    status: str
     global_score: Optional[float] = None
     model_score: Optional[float] = None
     summary: str = ""
@@ -147,22 +145,8 @@ class LogCreate(BaseModel):
     meta: Meta
 
 
-# ===== (구) 단순 신규성 체크 버전 =====
-class ReviewCheckRequest(BaseModel):
-    user_id: int
-    code: str
-    language: str
-
-
-class ReviewCheckResponse(BaseModel):
-    is_new: bool
-    reason: str
-    last_review_id: Optional[int] = None
-
-
 class ReviewSnippet(BaseModel):
     code: str
-    language: str
 
 
 class ReviewEvaluation(BaseModel):
@@ -171,7 +155,6 @@ class ReviewEvaluation(BaseModel):
 
 class ReviewRequestBody(BaseModel):
     snippet: Snippet
-    trigger: Literal["manual", "auto"] = "manual"
 
 
 class ReviewCreateEnvelope(BaseModel):
@@ -231,7 +214,6 @@ class ReviewResultRecord(BaseModel):
     comment_security: Optional[str] = None
 
     summary: str
-    status: str
 
 
 class ReviewResultPatch(BaseModel):
@@ -244,7 +226,6 @@ class ReviewListItem(BaseModel):
     model_score: int
     summary: str
     trigger: str
-    status: str
     created_at: datetime
 
 
@@ -259,7 +240,6 @@ class ReviewDetailResponse(BaseModel):
     model_score: int
     summary: str
     trigger: str
-    status: str
     created_at: datetime
 
     score_bug: int
@@ -303,7 +283,6 @@ class ReviewRequest(BaseModel):
 
 class ReviewRequestResponseBody(BaseModel):
     review_id: int
-    status: Literal["pending", "processing", "done", "error"]
 
 
 class ReviewRequestResponse(BaseModel):
@@ -344,7 +323,6 @@ class ReviewResultRecord(BaseModel):
     comment_security: Optional[str] = None
 
     summary: str
-    status: str
 
 
 class ReviewResultMeta(BaseModel):
@@ -381,7 +359,6 @@ class ReviewListItem(BaseModel):
     efficiency_index: Optional[float]
     summary: Optional[str]
     trigger: str
-    status: str
     created_at: str
 
 
@@ -407,7 +384,6 @@ class ReviewDetailResponseBody(BaseModel):
     efficiency_index: Optional[float]
     summary: Optional[str]
     trigger: str
-    status: str
     created_at: str
 
     # 카테고리별 점수
@@ -485,7 +461,6 @@ class ReviewItem(BaseModel):
     score_style: int
     score_security: int
 
-    status: str
     created_at: datetime
     updated_at: datetime
 

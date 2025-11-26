@@ -32,7 +32,6 @@ async def save_review_result(
         comment_maintainability=d.get("maintainability"),
         comment_style=d.get("style"),
         comment_security=d.get("security"),
-        status="done",
     )
 
     session.add(r)

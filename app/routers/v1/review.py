@@ -11,6 +11,7 @@ from sqlalchemy import select
 from app.utils.database import get_session
 from app.models.review import Review
 from app.models.action_log import ActionLog
+from app.models.user import User
 from app.schemas.common import Meta
 from app.schemas.review import (
     ReviewRequest,
@@ -21,24 +22,17 @@ from app.schemas.review import (
 )
 from app.services.llm_client import review_code
 from app.services.review_service import save_review_result
-from app.routers.ws_debug import ws_manager   # 🔥 WebSocket 매니저
+from app.routers.ws_debug import ws_manager
+from typing import List
+from app.routers.auth import get_current_user_id_from_cookie
+
 
 router = APIRouter(prefix="/v1/reviews", tags=["reviews"])
 
-# ─────────────────────────────────────────
-#  코드 정규화 & 해시
-# ─────────────────────────────────────────
 def normalize_code(code: str) -> str:
-    """
-    언어 상관없이 공통으로 쓸 수 있는 가벼운 정규화:
-    - CRLF → LF 통일
-    - 각 줄 좌우 공백 제거
-    - 완전히 빈 줄은 제거
-    """
     if not code:
         return ""
 
-    # 줄바꿈 통일
     code = code.replace("\r\n", "\n").replace("\r", "\n")
     lines = code.split("\n")
 
@@ -52,24 +46,17 @@ def normalize_code(code: str) -> str:
 
 
 def make_code_fingerprint(code: str) -> str:
-    """
-    정규화된 코드 문자열에 대한 SHA-256 해시를 hex로 반환.
-    """
     normalized = normalize_code(code)
     return sha256(normalized.encode("utf-8")).hexdigest()
 
 
-# ─────────────────────────────────────────
-#  공통: WebSocket 이벤트 헬퍼
-# ─────────────────────────────────────────
 async def emit_review_event(event_type: str, payload: dict) -> None:
-    """
-    리뷰 파이프라인 단계별로 WebSocket 이벤트를 쏘는 공통 함수.
-    """
-    await ws_manager.broadcast({
-        "type": event_type,
-        "payload": payload,
-    })
+    await ws_manager.broadcast(
+        {
+            "type": event_type,
+            "payload": payload,
+        }
+    )
 
 
 @router.post("/request", response_model=ReviewRequestResponse)
@@ -83,7 +70,19 @@ async def create_review_request(
     if not body.snippet or not body.snippet.code:
         raise HTTPException(status_code=400, detail="code snippet is empty")
 
-    user_id = getattr(meta, "user_id", None)
+    github_id = getattr(meta, "github_id", None)
+    if not github_id:
+        raise HTTPException(status_code=400, detail="meta.github_id is required")
+
+    result = await session.execute(
+        select(User).where(User.github_id == str(github_id))
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=400, detail="user not found for given github_id")
+
+    user_id = int(user.id)
+
     correlation_id = getattr(meta, "correlation_id", None)
 
     raw_model = getattr(meta, "model", None)
@@ -94,8 +93,8 @@ async def create_review_request(
         else:
             model_id = getattr(raw_model, "name", None) or "unknown"
 
-    language = body.snippet.language or "unknown"
-    trigger = body.trigger
+    language = getattr(meta, "language", None) or "unknown"
+    trigger = getattr(meta, "trigger", None) or "unknown"
 
     raw_analysis = getattr(meta, "analysis", None)
     if raw_analysis:
@@ -107,11 +106,12 @@ async def create_review_request(
         aspects = []
 
     code_fingerprint = make_code_fingerprint(body.snippet.code)
-    # 1️⃣ 요청 들어옴
+
     await emit_review_event(
         "review_request_received",
         {
             "correlation_id": correlation_id,
+            "github_id": str(github_id),
             "user_id": user_id,
             "language": language,
             "model": model_id,
@@ -128,11 +128,11 @@ async def create_review_request(
         criteria=aspects,
     )
 
-    # 2️⃣ LLM 요청 보냄
     await emit_review_event(
         "llm_request_sent",
         {
             "correlation_id": correlation_id,
+            "github_id": str(github_id),
             "user_id": user_id,
             "model": model_id,
             "language": language,
@@ -141,11 +141,11 @@ async def create_review_request(
 
     llm_res: LLMQualityResponse = await review_code(llm_req)
 
-    # 3️⃣ LLM 응답 받음
     await emit_review_event(
         "llm_response_received",
         {
             "correlation_id": correlation_id,
+            "github_id": str(github_id),
             "user_id": user_id,
             "model": model_id,
             "language": language,
@@ -162,11 +162,11 @@ async def create_review_request(
         llm_result=llm_res,
     )
 
-    # 4️⃣ DB 저장 직후
     await emit_review_event(
         "review_saved",
         {
             "correlation_id": correlation_id,
+            "github_id": str(github_id),
             "review_id": int(review.id),
             "user_id": int(review.user_id),
         },
@@ -176,6 +176,7 @@ async def create_review_request(
         user_id=user_id,
         event_name="REVIEW_REQUEST",
         properties={
+            "github_id": str(github_id),
             "correlation_id": correlation_id,
             "language": language,
             "model": model_id,
@@ -186,11 +187,11 @@ async def create_review_request(
     session.add(log)
     await session.commit()
 
-    # 5️⃣ 전체 완료
     await emit_review_event(
         "review_completed",
         {
             "correlation_id": correlation_id,
+            "github_id": str(github_id),
             "review_id": int(review.id),
             "user_id": int(review.user_id),
             "language": review.language,
@@ -211,10 +212,12 @@ async def create_review_request(
     now_iso = now.isoformat().replace("+00:00", "Z")
 
     resp_meta = Meta(
-        user_id=user_id,
-        review_id=int(review.id), 
+        github_id=str(github_id),
+        review_id=int(review.id),
         version=getattr(meta, "version", None) or "v1",
         actor="server",
+        language=language,
+        trigger=trigger,
         code_fingerprint=code_fingerprint,
         model=model_id,
         result={"result_ref": str(review.id), "error_message": None},
@@ -226,7 +229,6 @@ async def create_review_request(
 
     resp_body = ReviewRequestResponseBody(
         review_id=review.id,
-        status=review.status,
     )
 
     return ReviewRequestResponse(meta=resp_meta, body=resp_body)
@@ -237,28 +239,123 @@ async def get_review_raw(
     review_id: int,
     session: AsyncSession = Depends(get_session),
 ):
-    stmt = select(Review).where(Review.id == review_id)
-    rec = (await session.execute(stmt)).scalar_one_or_none()
-    if not rec:
+    stmt = (
+        select(Review, User)
+        .join(User, Review.user_id == User.id)
+        .where(Review.id == review_id)
+    )
+    row = (await session.execute(stmt)).first()
+    if not row:
         raise HTTPException(status_code=404, detail="review not found")
 
-    return {
-        "id": rec.id,
-        "user_id": rec.user_id,
-        "model": rec.model,
-        "trigger": rec.trigger,
-        "language": rec.language,
+    rec, user = row
+
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat().replace("+00:00", "Z")
+
+    meta = Meta(
+        github_id=user.github_id,
+        review_id=rec.id,
+        version="v1",
+        actor="server",
+        language=rec.language or "unknown",
+        trigger=rec.trigger or "manual",
+        code_fingerprint=None,
+        model=rec.model,
+        result={"result_ref": str(rec.id), "error_message": None},
+        audit={
+            "created_at": rec.created_at or now_iso,
+            "updated_at": rec.updated_at or now_iso,
+        },
+    )
+
+    body = {
         "quality_score": rec.quality_score,
         "summary": rec.summary,
-        "score_bug": rec.score_bug,
-        "score_maintainability": rec.score_maintainability,
-        "score_style": rec.score_style,
-        "score_security": rec.score_security,
-        "comment_bug": rec.comment_bug,
-        "comment_maintainability": rec.comment_maintainability,
-        "comment_style": rec.comment_style,
-        "comment_security": rec.comment_security,
-        "status": rec.status,
-        "created_at": rec.created_at,
-        "updated_at": rec.updated_at,
+        "scores_by_category": {
+            "bug": rec.score_bug,
+            "maintainability": rec.score_maintainability,
+            "style": rec.score_style,
+            "security": rec.score_security,
+        },
+        "comments": {
+            "bug": rec.comment_bug,
+            "maintainability": rec.comment_maintainability,
+            "style": rec.comment_style,
+            "security": rec.comment_security,
+        },
+    }
+
+    return {
+        "meta": meta.model_dump(),
+        "body": body,
+    }
+
+@router.get("/me", response_model=dict)
+async def get_my_reviews(
+    session: AsyncSession = Depends(get_session),
+    user_id: int = Depends(get_current_user_id_from_cookie),
+):
+    # 1) 현재 로그인 유저 정보 가져오기
+    user = await session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+
+    # 2) 이 유저의 리뷰들 최신순 조회
+    result = await session.execute(
+        select(Review)
+        .where(Review.user_id == user.id)
+        .order_by(Review.created_at.desc())
+    )
+    reviews: List[Review] = result.scalars().all()
+
+    now = datetime.now(timezone.utc)
+
+    meta = Meta(
+        github_id=user.github_id,
+        review_id=None,
+        version="v1",
+        actor="server",
+        language="python",
+        trigger="manual",
+        code_fingerprint=None,
+        model=None,
+        result={"result_ref": str(len(reviews)), "error_message": None},
+        audit={
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+
+    body = []
+    for rec in reviews:
+        body.append(
+            {
+                "review_id": rec.id,
+                "user_id": rec.user_id,
+                "model": rec.model,
+                "trigger": rec.trigger,
+                "language": rec.language,
+                "quality_score": rec.quality_score,
+                "summary": rec.summary,
+                "scores_by_category": {
+                    "bug": rec.score_bug,
+                    "maintainability": rec.score_maintainability,
+                    "style": rec.score_style,
+                    "security": rec.score_security,
+                },
+                "comments": {
+                    "bug": rec.comment_bug,
+                    "maintainability": rec.comment_maintainability,
+                    "style": rec.comment_style,
+                    "security": rec.comment_security,
+                },
+                "created_at": rec.created_at,
+                "updated_at": rec.updated_at,
+            }
+        )
+
+    return {
+        "meta": meta.model_dump(),
+        "body": body,
     }

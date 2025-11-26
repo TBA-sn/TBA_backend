@@ -143,10 +143,12 @@ async def debug_mint(user_id: int, session: AsyncSession = Depends(get_session))
     now = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
     meta = Meta(
-        user_id=user.id,
+        github_id=user.github_id,
         review_id=None,
         version="v1",
         actor="server",
+        language="python",
+        trigger="manual",
         code_fingerprint=None,
         model="github-debug",
         result={"result_ref": None, "error_message": None},

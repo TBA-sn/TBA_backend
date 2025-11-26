@@ -65,10 +65,6 @@
 
 {% if resp is not none %}
   <hr/>
-  <h3>응답</h3>
-  <p><b>Status:</b> {{ resp.status }}</p>
-  <pre style="background:#111;color:#0f0;padding:10px;border-radius:8px;overflow:auto;white-space:pre-wrap;">{{ resp.pretty | safe }}</pre>
-
   <h3>보낸 페이로드</h3>
   <pre style="background:#222;color:#ddd;padding:10px;border-radius:8px;overflow:auto;white-space:pre-wrap;">{{ sent_pretty | safe }}</pre>
 

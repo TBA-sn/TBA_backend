@@ -58,20 +58,14 @@ def build_code_request_payload(
         "actor": "web",
         "code_fingerprint": None,
         "model": {"name": model_id},
-        "analysis": {"aspects": aspects, "total_steps": 6},
-        "progress": {"status": "pending", "next_step": 1},
         "result": None,
         "audit": None,
     }
 
     body = {
-        "user_id": user_id,
         "snippet": {
             "code": code,
-            "language": language,
         },
-        "trigger": trigger,
-        "model": model_id,
     }
 
     return {"meta": meta, "body": body}

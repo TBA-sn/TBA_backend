@@ -37,8 +37,6 @@ class Review(Base):
     comment_style = Column(Text, nullable=True)
     comment_security = Column(Text, nullable=True)
 
-    status = Column(String(20), nullable=False, default="done")
-
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
