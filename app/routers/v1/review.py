@@ -2,6 +2,7 @@
 
 from uuid import uuid4
 from datetime import datetime, timezone
+from hashlib import sha256
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,39 @@ from app.services.review_service import save_review_result
 from app.routers.ws_debug import ws_manager   # 🔥 WebSocket 매니저
 
 router = APIRouter(prefix="/v1/reviews", tags=["reviews"])
+
+# ─────────────────────────────────────────
+#  코드 정규화 & 해시
+# ─────────────────────────────────────────
+def normalize_code(code: str) -> str:
+    """
+    언어 상관없이 공통으로 쓸 수 있는 가벼운 정규화:
+    - CRLF → LF 통일
+    - 각 줄 좌우 공백 제거
+    - 완전히 빈 줄은 제거
+    """
+    if not code:
+        return ""
+
+    # 줄바꿈 통일
+    code = code.replace("\r\n", "\n").replace("\r", "\n")
+    lines = code.split("\n")
+
+    normalized_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped:
+            normalized_lines.append(stripped)
+
+    return "\n".join(normalized_lines)
+
+
+def make_code_fingerprint(code: str) -> str:
+    """
+    정규화된 코드 문자열에 대한 SHA-256 해시를 hex로 반환.
+    """
+    normalized = normalize_code(code)
+    return sha256(normalized.encode("utf-8")).hexdigest()
 
 
 # ─────────────────────────────────────────
@@ -49,11 +83,11 @@ async def create_review_request(
     if not body.snippet or not body.snippet.code:
         raise HTTPException(status_code=400, detail="code snippet is empty")
 
-    user_id = body.user_id
+    user_id = getattr(meta, "user_id", None)
     correlation_id = getattr(meta, "correlation_id", None)
 
     raw_model = getattr(meta, "model", None)
-    model_id = "unknown"
+    model_id = raw_model or "unknown"
     if raw_model:
         if isinstance(raw_model, dict):
             model_id = raw_model.get("name") or "unknown"
@@ -72,6 +106,7 @@ async def create_review_request(
     else:
         aspects = []
 
+    code_fingerprint = make_code_fingerprint(body.snippet.code)
     # 1️⃣ 요청 들어옴
     await emit_review_event(
         "review_request_received",
@@ -82,6 +117,7 @@ async def create_review_request(
             "model": model_id,
             "trigger": trigger,
             "aspects": aspects,
+            "code_fingerprint": code_fingerprint,
         },
     )
 
@@ -175,13 +211,12 @@ async def create_review_request(
     now_iso = now.isoformat().replace("+00:00", "Z")
 
     resp_meta = Meta(
-        id=None,
+        user_id=user_id,
+        review_id=int(review.id), 
         version=getattr(meta, "version", None) or "v1",
         actor="server",
-        identity=getattr(meta, "identity", None),
-        model=getattr(meta, "model", None),
-        analysis=getattr(meta, "analysis", None),
-        progress={"status": review.status, "next_step": None},
+        code_fingerprint=code_fingerprint,
+        model=model_id,
         result={"result_ref": str(review.id), "error_message": None},
         audit={
             "created_at": now_iso,

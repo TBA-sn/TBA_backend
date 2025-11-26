@@ -143,11 +143,12 @@ async def debug_mint(user_id: int, session: AsyncSession = Depends(get_session))
     now = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
     meta = Meta(
-        id=None,
+        user_id=user.id,
+        review_id=None,
         version="v1",
         actor="server",
-        identity=None,
-        model=None,
+        code_fingerprint=None,
+        model_id = getattr(meta, "model", None) or "unknown"
         analysis=None,
         progress={"status": "done", "next_step": None},
         result={"result_ref": None, "error_message": None},

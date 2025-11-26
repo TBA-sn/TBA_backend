@@ -48,7 +48,6 @@ def build_code_request_payload(
     trigger: str,
     code: str,
     aspects: List[str],
-    file_path: str | None = None,
 ) -> dict:
     now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
@@ -57,7 +56,7 @@ def build_code_request_payload(
         "ts": now,
         "correlation_id": str(uuid4()),
         "actor": "web",
-        "identity": None,
+        "code_fingerprint": None,
         "model": {"name": model_id},
         "analysis": {"aspects": aspects, "total_steps": 6},
         "progress": {"status": "pending", "next_step": 1},
@@ -70,7 +69,6 @@ def build_code_request_payload(
         "snippet": {
             "code": code,
             "language": language,
-            "file_path": file_path or "",
         },
         "trigger": trigger,
         "model": model_id,
@@ -232,7 +230,6 @@ async def api_test_submit(
     code: str = Form(...),
     token: str | None = Form(None),
     criteria: str | None = Form(None),
-    file_path: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
 ):
     user = await _get_current_user(request, session)
@@ -282,7 +279,6 @@ async def api_test_submit(
         trigger=trigger,
         code=code,
         aspects=crit_list,
-        file_path=file_path,
     )
 
     url = f"{INTERNAL_API_BASE}/v1/reviews/request"

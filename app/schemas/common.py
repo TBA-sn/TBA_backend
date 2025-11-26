@@ -3,11 +3,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class Progress(BaseModel):
-    status: Literal["pending", "processing", "done", "error"]
-    next_step: Optional[int] = None
-
-
 class ResultInfo(BaseModel):
     result_ref: Optional[str] = None
     error_message: Optional[str] = None
@@ -19,13 +14,12 @@ class Audit(BaseModel):
 
 
 class Meta(BaseModel):
-    id: Optional[int] = None
+    user_id: Optional[int] = None
+    review_id: Optional[int] = None
     version: str = "v1"
     actor: str
-    identity: Optional[Dict[str, Any]] = None
-    model: Optional[Dict[str, Any]] = None
-    analysis: Optional[Dict[str, Any]] = None
-    progress: Optional[Progress] = None
+    code_fingerprint: Optional[str] = None
+    model: Optional[str] = None
     result: Optional[ResultInfo] = None
     audit: Optional[Audit] = None
 

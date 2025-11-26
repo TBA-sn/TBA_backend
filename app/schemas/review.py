@@ -22,7 +22,6 @@ class ExtensionRequest(BaseModel):
 class Snippet(BaseModel):
     code: str
     language: str
-    file_path: str
 
 
 class DetectionInfo(BaseModel):
@@ -36,7 +35,6 @@ class EvaluationInfo(BaseModel):
 
 
 class CodeAnalysisRequestBody(BaseModel):
-    user_id: int
     snippet: Snippet
     detection: Optional[DetectionInfo] = None
     evaluation: EvaluationInfo
@@ -154,7 +152,6 @@ class ReviewCheckRequest(BaseModel):
     user_id: int
     code: str
     language: str
-    file_path: str
 
 
 class ReviewCheckResponse(BaseModel):
@@ -166,7 +163,6 @@ class ReviewCheckResponse(BaseModel):
 class ReviewSnippet(BaseModel):
     code: str
     language: str
-    file_path: str | None = None
 
 
 class ReviewEvaluation(BaseModel):
@@ -174,7 +170,6 @@ class ReviewEvaluation(BaseModel):
 
 
 class ReviewRequestBody(BaseModel):
-    user_id: int
     snippet: Snippet
     trigger: Literal["manual", "auto"] = "manual"
 
@@ -283,7 +278,6 @@ class ReviewCheckBody(BaseModel):
     user_id: int
     code: str
     language: str
-    file_path: str
 
 
 class ReviewCheckRequest(BaseModel):
@@ -332,10 +326,6 @@ class ReviewCategoryResult(BaseModel):
 
 
 class ReviewResultRecord(BaseModel):
-    """
-    /v1/reviews/{review_id}/result PATCH 에서 쓰는 payload
-    categories 배열을 날리고 카테고리별 점수/코멘트를 전부 필드로 쪼갠 구조
-    """
     review_id: int
     user_id: int
     model: str
@@ -405,25 +395,12 @@ class ReviewListResponse(BaseModel):
 
 
 class ReviewDetailCategory(BaseModel):
-    """
-    참고용으로 남겨두지만,
-    실제 ResponseBody에는 categories 리스트를 더 이상 포함하지 않음.
-    """
     name: str
     score: int
     comment: str
 
 
 class ReviewDetailResponseBody(BaseModel):
-    """
-    /v1/reviews/{review_id} 상세 Response
-
-    기존:
-      categories: [ { name, score, comment }, ... ]  ❌
-
-    변경:
-      score_* / comment_* 필드로 전부 쪼갬 ✅
-    """
     review_id: int
     global_score: Optional[int]
     model_score: Optional[int]
@@ -465,10 +442,6 @@ class ReviewAPIResponse(BaseModel):
 
 # ===== 새 LLM 결과 포맷 (scores_by_category를 타입으로 고정) =====
 class ReviewDetailItem(BaseModel):
-    """
-    한 개의 이슈(버그/성능/스타일 등)에 대한 상세 정보.
-    LLM이 세부 이슈를 쏴줄 때 사용.
-    """
     issue_id: Optional[str] = None
     issue_category: Category
     issue_severity: IssueSeverity
