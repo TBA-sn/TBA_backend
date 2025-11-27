@@ -17,6 +17,7 @@ class UserCreate(BaseModel):
 
 class UserOut(BaseModel):
     id: int
+    github_id: str
     login: str
     name: Optional[str] = None
     avatar_url: Optional[str] = None
