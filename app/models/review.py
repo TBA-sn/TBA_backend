@@ -1,12 +1,13 @@
 # app/models/review.py
 from sqlalchemy import (
-    BigInteger,
     Column,
     DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
+    JSON,
+    Float
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -14,73 +15,64 @@ from sqlalchemy.sql import func
 from app.utils.database import Base
 
 
+class ReviewMeta(Base):
+    __tablename__ = "review_meta"
+
+    id = Column(Integer, primary_key=True, index=True)
+    github_id = Column(String(32), nullable=True, index=True)
+    version = Column(String(10), nullable=False, server_default="v1")
+    language = Column(String(50), nullable=False, server_default="python")
+    trigger = Column(String(32), nullable=False, server_default="manual")
+    code_fingerprint = Column(String(128), nullable=True)
+    model = Column(String(255), nullable=True)
+    audit = Column(DateTime(timezone=True), nullable=True)
+
+    reviews = relationship(
+        "Review",
+        back_populates="meta",
+        cascade="all, delete-orphan",
+    )
+
+
 class Review(Base):
     __tablename__ = "review"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-
-    model = Column(String(255), nullable=False)
-    trigger = Column(String(50), nullable=False)
-    language = Column(String(50), nullable=True)
-
-    quality_score = Column(Integer, nullable=False)
+    meta_id = Column(
+        Integer,
+        ForeignKey("review_meta.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    quality_score = Column(Float, nullable=False)
     summary = Column(Text, nullable=False)
 
-    score_bug = Column(Integer, nullable=False)
-    score_maintainability = Column(Integer, nullable=False)
-    score_style = Column(Integer, nullable=False)
-    score_security = Column(Integer, nullable=False)
+    meta = relationship("ReviewMeta", back_populates="reviews")
 
-    comment_bug = Column(Text, nullable=True)
-    comment_maintainability = Column(Text, nullable=True)
-    comment_style = Column(Text, nullable=True)
-    comment_security = Column(Text, nullable=True)
-
-    created_at = Column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-    )
-    updated_at = Column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
-
-    details = relationship(
-        "ReviewDetail",
+    categories = relationship(
+        "ReviewCategoryResult",
         back_populates="review",
         cascade="all, delete-orphan",
     )
 
 
-class ReviewDetail(Base):
-    __tablename__ = "review_detail"
 
-    id = Column(BigInteger, primary_key=True, index=True)
+class ReviewCategoryResult(Base):
+    __tablename__ = "review_category_result"
+
+    id = Column(Integer, primary_key=True, index=True)
+
     review_id = Column(
-        BigInteger,
+        Integer,
         ForeignKey("review.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    issue_id = Column(String(50), nullable=True)
-    issue_category = Column(String(100), nullable=False)
-    issue_severity = Column(String(10), nullable=False)
+    category = Column(String(50), nullable=False, index=True)
 
-    issue_summary = Column(String(255), nullable=False)
-    issue_details = Column(Text, nullable=True)
+    score = Column(Float, nullable=False)
+    comment = Column(Text, nullable=True)
 
-    issue_line_number = Column(Integer, nullable=True)
-    issue_column_number = Column(Integer, nullable=True)
 
-    created_at = Column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-    )
-
-    review = relationship("Review", back_populates="details")
+    review = relationship("Review", back_populates="categories")

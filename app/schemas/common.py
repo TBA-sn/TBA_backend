@@ -8,10 +8,6 @@ class ResultInfo(BaseModel):
     error_message: Optional[str] = None
 
 
-class Audit(BaseModel):
-    created_at: datetime
-    updated_at: datetime
-
 
 class Meta(BaseModel):
     github_id: Optional[str] = None
@@ -23,7 +19,7 @@ class Meta(BaseModel):
     code_fingerprint: Optional[str] = None
     model: Optional[str] = None
     result: Optional[ResultInfo] = None
-    audit: Optional[Audit] = None
+    audit: Optional[datetime] = None
 
 
 class SimpleMeta(BaseModel):

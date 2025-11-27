@@ -1,41 +1,68 @@
 # app/services/review_service.py
+
+from datetime import datetime, timezone
+from typing import Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.review import Review
+from app.models.review import Review, ReviewMeta, ReviewCategoryResult
 from app.schemas.review import LLMQualityResponse
 
 
 async def save_review_result(
     session: AsyncSession,
     *,
-    user_id: int,
+    github_id: Optional[str],
     model: str,
     trigger: str,
-    language: str | None,
+    language: Optional[str],
     llm_result: LLMQualityResponse,
+    code_fingerprint: Optional[str] = None,
 ) -> Review:
-    s = llm_result.scores_by_category
-    d = llm_result.review_details or {}
+    """
+    LLM 결과를 기반으로 다음을 저장한다:
+      - review_meta
+      - review
+      - review_category_result (bug / maintainability / style / security)
+    그리고 Review 객체를 반환한다.
+    """
 
-    r = Review(
-        user_id=user_id,
+    now = datetime.now(timezone.utc)
+
+    # 1) Meta 생성
+    meta = ReviewMeta(
+        github_id=github_id,
+        version="v1",
+        language=language or "unknown",
+        trigger=trigger or "manual",
+        code_fingerprint=code_fingerprint,
         model=model,
-        trigger=trigger,
-        language=language,
-        quality_score=llm_result.quality_score,
-        summary=llm_result.review_summary,
-        score_bug=s.bug,
-        score_maintainability=s.maintainability,
-        score_style=s.style,
-        score_security=s.security,
-        comment_bug=d.get("bug"),
-        comment_maintainability=d.get("maintainability"),
-        comment_style=d.get("style"),
-        comment_security=d.get("security"),
+        audit=now,
     )
+    session.add(meta)
+    await session.flush()  # meta.id 확보
 
-    session.add(r)
-    await session.commit()
-    await session.refresh(r)
+    # 2) Review 생성
+    review = Review(
+        meta_id=meta.id,
+        quality_score=float(llm_result.quality_score),
+        summary=llm_result.review_summary,
+    )
+    session.add(review)
+    await session.flush()  # review.id 확보
 
-    return r
+    # 3) 카테고리별 점수/코멘트 생성
+    scores = llm_result.scores_by_category.model_dump()
+    comments = llm_result.review_details or {}
+
+    for category_name, score in scores.items():
+        category_row = ReviewCategoryResult(
+            review_id=review.id,
+            category=category_name,              # "bug" / "maintainability" / "style" / "security"
+            score=float(score),
+            comment=comments.get(category_name),
+        )
+        session.add(category_row)
+
+    # 여기서는 commit 안 한다. (라우터에서 ActionLog까지 묶어서 commit 할 것)
+    return review

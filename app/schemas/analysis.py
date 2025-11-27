@@ -2,11 +2,6 @@
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
-
-# ============================================================
-# 1) /v1/analysis/llm/request  (새 스펙 기반)
-# ============================================================
-
 class LLMRequestInput(BaseModel):
     code: str
     language: str
@@ -33,10 +28,6 @@ class LLMAnalysisRequest(BaseModel):
     request: LLMAnalysisRequestBody
 
 
-# ============================================================
-# 2) /v1/analysis/llm/callback  (새 스펙 기반)
-# ============================================================
-
 class Usage(BaseModel):
     prompt_tokens: int
     completion_tokens: int
@@ -60,11 +51,6 @@ class LLMCallbackRequest(BaseModel):
     meta: LLMCallbackMeta
     response: LLMCallbackResponse
 
-
-# ============================================================
-# 3) 기존 LLM Router 코드 호환용 타입들
-#    (app/routers/llm/__init__.py 에서 import 중)
-# ============================================================
 
 class AnalysisRequestIn(BaseModel):
     meta: Optional[Dict[str, Any]] = None

@@ -8,7 +8,6 @@ class ReviewCaseBrief(BaseModel):
 
 class ReviewReportCreate(BaseModel):
     model_id: str
-    # 생성 직후엔 summary/score는 없음
 
 class ReviewReportOut(BaseModel):
     id: int
