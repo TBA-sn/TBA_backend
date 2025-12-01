@@ -22,6 +22,8 @@ from app.schemas.review import (
     ScoresByCategory,
     ReviewResultBody,
     ReviewDetailResponse,
+    ReviewListResponse,
+    ReviewListItem,
 )
 from app.services.llm_client import review_code
 from app.services.review_service import save_review_result
@@ -239,6 +241,76 @@ async def create_review_request(
     return ReviewRequestResponse(meta=resp_meta, body=resp_body)
 
 
+@router.get("", response_model=ReviewListResponse)
+async def list_reviews(
+    session: AsyncSession = Depends(get_session),
+):
+    stmt = (
+        select(Review)
+        .join(ReviewMeta, Review.meta_id == ReviewMeta.id)
+        .options(joinedload(Review.meta), joinedload(Review.categories))
+        .order_by(ReviewMeta.audit.desc())
+    )
+    result = await session.execute(stmt)
+    reviews: List[Review] = result.unique().scalars().all()
+
+    now = datetime.now(timezone.utc)
+    meta = Meta(
+        github_id=None,
+        review_id=None,
+        version="v1",
+        actor="server",
+        language="python",
+        trigger="manual",
+        code_fingerprint=None,
+        model=None,
+        result={"result_ref": str(len(reviews)), "error_message": None},
+        audit=build_audit_value(now),
+    )
+
+    body: List[ReviewListItem] = []
+
+    for rec in reviews:
+        rec_meta: ReviewMeta | None = rec.meta
+        if not rec_meta:
+            continue
+
+        cat_map: Dict[str, ReviewCategoryResult] = {c.category: c for c in rec.categories}
+
+        def score(name: str) -> int:
+            c = cat_map.get(name)
+            return int(c.score) if c and c.score is not None else 0
+
+        def comment(name: str) -> str:
+            c = cat_map.get(name)
+            return c.comment or "" if c and c.comment is not None else ""
+
+        body.append(
+            ReviewListItem(
+                review_id=int(rec.id),
+                github_id=rec_meta.github_id,
+                model=rec_meta.model or "unknown",
+                trigger=rec_meta.trigger,
+                language=rec_meta.language,
+                quality_score=int(rec.quality_score),
+                summary=rec.summary,
+                scores_by_category=ScoresByCategory(
+                    bug=score("bug"),
+                    maintainability=score("maintainability"),
+                    style=score("style"),
+                    security=score("security"),
+                ),
+                comments={
+                    "bug": comment("bug"),
+                    "maintainability": comment("maintainability"),
+                    "style": comment("style"),
+                    "security": comment("security"),
+                },
+                audit=build_audit_value(rec_meta.audit),
+            )
+        )
+
+    return ReviewListResponse(meta=meta, body=body)
 # ─────────────────────────────────────────
 #  GET /v1/reviews/{review_id}
 # ─────────────────────────────────────────
@@ -324,7 +396,8 @@ async def get_my_reviews(
         .join(ReviewMeta, Review.meta_id == ReviewMeta.id)
         .options(joinedload(Review.meta), joinedload(Review.categories))
         .where(ReviewMeta.github_id == user.github_id)
-        .order_by(ReviewMeta.audit.desc().nullslast())
+        .order_by(ReviewMeta.audit.desc())
+
     )
     result = await session.execute(stmt)
     reviews: List[Review] = result.unique().scalars().all()

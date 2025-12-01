@@ -32,7 +32,6 @@
     <input type="text" name="trigger" value="manual" required />
   </div>
 
-
   <div style="display:grid;grid-template-columns:160px 1fr;gap:8px;">
     <label>code</label>
     <textarea name="code" rows="8" placeholder="여기에 코드 입력" required>def add(a,b): return a+b</textarea>
@@ -65,8 +64,16 @@
 
 {% if resp is not none %}
   <hr/>
-  <h3>보낸 페이로드</h3>
+
+  <h3>보낸 페이로드 (/v1/reviews/request)</h3>
   <pre style="background:#222;color:#ddd;padding:10px;border-radius:8px;overflow:auto;white-space:pre-wrap;">{{ sent_pretty | safe }}</pre>
+
+  <h3>LLM 요청 페이로드 (디버그용)</h3>
+  <pre style="background:#111;color:#ddd;padding:10px;border-radius:8px;overflow:auto;white-space:pre-wrap;">{{ llm_payload_pretty | safe }}</pre>
+
+  <h3>응답(JSON)</h3>
+  <p style="color:#aaa;margin:4px 0;">status: {{ resp.status }}</p>
+  <pre style="background:#202020;color:#ddd;padding:10px;border-radius:8px;overflow:auto;white-space:pre-wrap;">{{ resp.pretty | safe }}</pre>
 
   <p style="color:#666;">Authorization 사용: {{ '예' if used_authorization else '아니오' }}</p>
 {% endif %}

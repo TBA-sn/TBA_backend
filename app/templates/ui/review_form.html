@@ -16,13 +16,12 @@
       <label>user_id</label>
       {% if current_user_id %}
         <input
-  type="number"
-  name="user_id"
-  placeholder="user id"
-  value="{{ current_user_id or '' }}"
-  {% if current_user_id %}readonly{% endif %}
-/>
-
+          type="number"
+          name="user_id"
+          placeholder="user id"
+          value="{{ current_user_id or '' }}"
+          readonly
+        />
       {% else %}
         <input name="user_id" type="number" placeholder="1" required />
       {% endif %}

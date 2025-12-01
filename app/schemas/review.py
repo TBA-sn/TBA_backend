@@ -207,3 +207,25 @@ class ReviewAPIResponse(BaseModel):
     review_summary: str
     scores_by_category: Dict[str, float]
     review_details: List[LLMReviewDetail]
+
+
+# ─────────────────────────────────────────
+# 리뷰 목록용 스키마
+# ─────────────────────────────────────────
+
+class ReviewListItem(BaseModel):
+    review_id: int
+    github_id: Optional[str] = None
+    model: str
+    trigger: Optional[str] = None
+    language: Optional[str] = None
+    quality_score: int
+    summary: str
+    scores_by_category: ScoresByCategory
+    comments: Dict[str, str]
+    audit: str
+
+
+class ReviewListResponse(BaseModel):
+    meta: Meta
+    body: List[ReviewListItem]

@@ -5,9 +5,10 @@
 <h2>리뷰 #{{ rec.id }}</h2>
 
 <p>
-  <b>user_id</b>: {{ rec.user_id }}
-  | <b>model</b>: {{ rec.model }}
-  | <b>trigger</b>: {{ rec.trigger }}
+  {# Review 모델에 user_id / model / trigger / language 없을 수도 있어서, 없으면 빈값 찍히게 둠 #}
+  <b>user_id</b>: {{ rec.user_id or '' }}
+  | <b>model</b>: {{ rec.model or '' }}
+  | <b>trigger</b>: {{ rec.trigger or '' }}
   | <b>language</b>: {{ rec.language or 'N/A' }}
   | <b>created_at</b>: {{ rec.created_at }}
 </p>
@@ -54,7 +55,7 @@
   </thead>
   <tbody>
     {% if category_rows %}
-      {# 🔥 ui.py에서 build_category_rows 로 만든 8줄 #}
+      {# 🔥 ui.py에서 만든 카테고리 행들: bug / maintainability / style / security #}
       {% for row in category_rows %}
         <tr>
           <td>{{ row.category }}</td>
@@ -79,6 +80,7 @@
         <td>{{ rec.score_style }}</td>
         <td>{{ rec.comment_style or '-' }}</td>
       </tr>
+      <tr>
         <td>security</td>
         <td>{{ rec.score_security }}</td>
         <td>{{ rec.comment_security or '-' }}</td>

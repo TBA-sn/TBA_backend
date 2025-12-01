@@ -9,12 +9,14 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.utils.database import get_session
-from app.models.review import Review
+from app.models.review import Review, ReviewMeta
 from app.models.action_log import ActionLog
 from app.models.user import User
 from app.routers.auth import get_current_user_id_from_cookie
+from app.schemas.common import Meta as MetaSchema
 import httpx
 import os
 
@@ -23,6 +25,10 @@ templates = Jinja2Templates(directory="app/templates")
 
 INTERNAL_API_BASE: str = os.getenv("INTERNAL_API_BASE", "http://127.0.0.1:8000")
 
+
+# =====================================================================
+# 공통 유저 조회
+# =====================================================================
 
 async def _get_current_user(
     request: Request,
@@ -40,27 +46,37 @@ async def _get_current_user(
     return row.scalar_one_or_none()
 
 
+# =====================================================================
+# /v1/reviews/request 로 넘길 payload 빌드
+# =====================================================================
+
 def build_code_request_payload(
     *,
-    user_id: int,
+    user_id: int,        # 의미상 남겨둠 (현재는 사용 안 함)
+    github_id: str,
     model_id: str,
     language: str,
     trigger: str,
     code: str,
     aspects: List[str],
 ) -> dict:
-    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    """
+    /v1/reviews/request 에 맞춘 envelope(meta + body) 생성
+    Meta 스키마(app.schemas.common.Meta)에 정확히 맞춘다.
+    """
 
-    meta = {
-        "version": "v1",
-        "ts": now,
-        "correlation_id": str(uuid4()),
-        "actor": "web",
-        "code_fingerprint": None,
-        "model": {"name": model_id},
-        "result": None,
-        "audit": None,
-    }
+    meta_obj = MetaSchema(
+        github_id=github_id,
+        review_id=None,
+        version="v1",
+        actor="web",
+        language=language,
+        trigger=trigger,
+        code_fingerprint=None,
+        model=model_id,
+        result=None,
+        audit=None,
+    )
 
     body = {
         "snippet": {
@@ -68,7 +84,10 @@ def build_code_request_payload(
         },
     }
 
-    return {"meta": meta, "body": body}
+    return {
+        "meta": meta_obj.model_dump(mode="json"),
+        "body": body,
+    }
 
 
 # =====================================================================
@@ -98,7 +117,9 @@ async def review_submit(
     language: str = Form(...),
     trigger: str = Form(...),
     code: str = Form(...),
+    session: AsyncSession = Depends(get_session),
 ):
+    # 1) 유저 ID 결정 (쿠키 우선, 없으면 폼의 user_id)
     try:
         uid = get_current_user_id_from_cookie(request)
     except Exception:
@@ -110,10 +131,22 @@ async def review_submit(
     if uid is None:
         return RedirectResponse(url="/auth/github/login", status_code=303)
 
+    # 2) DB에서 github_id 조회
+    row = await session.execute(select(User).where(User.id == int(uid)))
+    user = row.scalar_one_or_none()
+    if not user or not user.github_id:
+        # 깃허브 로그인 안 돼 있거나 github_id 없는 경우 다시 로그인으로
+        return RedirectResponse(url="/auth/github/login", status_code=303)
+
+    github_id = str(user.github_id)
+
+    # 3) criteria/aspects (지금은 체크박스 같은 거 없으니까 빈 리스트)
     criteria: List[str] = []
 
+    # 4) /v1/reviews/request 로 보낼 payload 생성
     payload = build_code_request_payload(
         user_id=int(uid),
+        github_id=github_id,
         model_id=model_id,
         language=language,
         trigger=trigger,
@@ -140,7 +173,7 @@ async def review_submit(
 
 
 # =====================================================================
-# 리뷰 상세 / 목록
+# 리뷰 상세
 # =====================================================================
 
 @router.get("/review/{review_id}")
@@ -149,23 +182,39 @@ async def review_detail(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ):
-    stmt = select(Review).where(Review.id == review_id)
-    rec = (await session.execute(stmt)).scalar_one_or_none()
+    """
+    일단은 ORM Review 그대로 가져와서 템플릿에 넘김.
+    (Review 모델에 없는 필드는 Jinja에서 그냥 빈 값으로 떨어지니까 에러 안 남)
+    나중에 필요하면 /v1/reviews/{id} API를 불러서 quality / category_rows 채워도 됨.
+    """
+    stmt = (
+        select(Review)
+        .options(joinedload(Review.meta), joinedload(Review.categories))
+        .where(Review.id == review_id)
+    )
+    rec = (await session.execute(stmt)).unique().scalar_one_or_none()
     if not rec:
         return RedirectResponse(url="/ui/reviews", status_code=303)
 
     user = await _get_current_user(request, session)
 
+    # 현재는 quality / category_rows 안 채우고, 템플릿에서 fallback 로직 사용
     return templates.TemplateResponse(
         "ui/review_detail.html",
         {
             "request": request,
             "rec": rec,
+            "quality": None,
+            "category_rows": None,
             "current_user_id": user.id if user else None,
             "current_user_login": user.login if user else None,
         },
     )
 
+
+# =====================================================================
+# 리뷰 목록
+# =====================================================================
 
 @router.get("/reviews")
 async def review_list(
@@ -173,11 +222,17 @@ async def review_list(
     session: AsyncSession = Depends(get_session),
     user_id: int | None = None,
 ):
-    stmt = select(Review).order_by(Review.created_at.desc())
-    if user_id is not None:
-        stmt = stmt.where(Review.user_id == user_id)
+    """
+    ReviewMeta.audit 기준으로 최신순 정렬해서 리뷰 목록 조회
+    """
+    stmt = (
+        select(Review)
+        .join(ReviewMeta, Review.meta_id == ReviewMeta.id)
+        .options(joinedload(Review.meta))
+        .order_by(ReviewMeta.audit.desc())
+    )
 
-    rows = (await session.execute(stmt)).scalars().all()
+    rows = (await session.execute(stmt)).unique().scalars().all()
     user = await _get_current_user(request, session)
 
     return templates.TemplateResponse(
@@ -208,6 +263,9 @@ async def api_test_form(
         {
             "request": request,
             "resp": None,
+            "sent_pretty": None,
+            "llm_payload_pretty": None,
+            "used_authorization": False,
             "current_user_id": user.id if user else None,
             "current_user_login": user.login if user else None,
         },
@@ -226,6 +284,7 @@ async def api_test_submit(
     criteria: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
 ):
+    # 1) 현재 로그인 유저 확인
     user = await _get_current_user(request, session)
     effective_user_id: Optional[int] = None
 
@@ -237,17 +296,28 @@ async def api_test_submit(
     if effective_user_id is None:
         return RedirectResponse(url="/auth/github/login", status_code=303)
 
+    # 2) DB에서 github_id 조회
+    row = await session.execute(select(User).where(User.id == effective_user_id))
+    effective_user = row.scalar_one_or_none()
+    if not effective_user or not effective_user.github_id:
+        return RedirectResponse(url="/auth/github/login", status_code=303)
+
+    github_id = str(effective_user.github_id)
+
+    # criteria 문자열 → 리스트
     if criteria:
         crit_list = [c.strip() for c in criteria.split(",") if c.strip()]
     else:
         crit_list = []
 
+    # LLM 디버깅용 payload (화면에 보여주는 용도)
     llm_payload = {
         "code": code,
         "model": model_id,
         "criteria": crit_list,
     }
 
+    # 3) Authorization 토큰 결정
     final_token: str | None = None
     access_cookie = request.cookies.get("access_token")
 
@@ -256,6 +326,7 @@ async def api_test_submit(
     elif access_cookie:
         final_token = access_cookie
     else:
+        # 디버그용 토큰 발급 엔드포인트 호출
         debug_url = f"{INTERNAL_API_BASE}/auth/github/debug/mint?user_id={effective_user_id}"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
@@ -266,8 +337,10 @@ async def api_test_submit(
         except Exception:
             final_token = None
 
+    # 4) /v1/reviews/request 에 보낼 최종 payload
     payload = build_code_request_payload(
         user_id=effective_user_id,
+        github_id=github_id,
         model_id=model_id,
         language=language,
         trigger=trigger,

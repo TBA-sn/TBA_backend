@@ -13,10 +13,11 @@
   <thead>
     <tr>
       <th>ID</th>
-      <th>user_id</th>
+      <th>github_id</th>
       <th>model</th>
-      <th>global/model</th>
-      <th>created_at</th>
+      <th>language</th>
+      <th>quality_score</th>
+      <th>audit</th>
       <th></th>
     </tr>
   </thead>
@@ -24,16 +25,35 @@
   {% for r in rows %}
     <tr>
       <td>{{ r.id }}</td>
-      <td>{{ r.user_id }}</td>
-      <td>{{ r.model }}</td>
       <td>
-        {% if r.scores %}
-          {{ r.scores.global_score }}/{{ r.scores.model_score }}
+        {% if r.meta %}
+          {{ r.meta.github_id or '-' }}
         {% else %}
           -
         {% endif %}
       </td>
-      <td>{{ r.created_at }}</td>
+      <td>
+        {% if r.meta %}
+          {{ r.meta.model or 'unknown' }}
+        {% else %}
+          -
+        {% endif %}
+      </td>
+      <td>
+        {% if r.meta %}
+          {{ r.meta.language or '-' }}
+        {% else %}
+          -
+        {% endif %}
+      </td>
+      <td>{{ r.quality_score }}</td>
+      <td>
+  {% if r.meta and r.meta.audit %}
+    {{ r.meta.audit }}
+  {% else %}
+    -
+  {% endif %}
+</td>
       <td><a class="button" href="/ui/review/{{ r.id }}">보기</a></td>
     </tr>
   {% else %}
