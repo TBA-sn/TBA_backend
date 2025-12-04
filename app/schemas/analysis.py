@@ -16,11 +16,9 @@ class LLMSchema(BaseModel):
 class LLMAnalysisRequestBody(BaseModel):
     model: str
     input: LLMRequestInput
-    # JSON에서는 키 이름이 "schema" 여야 해서 alias 사용
     output_schema: LLMSchema = Field(..., alias="schema")
 
     class Config:
-        # 이름으로도, alias("schema")로도 받을 수 있게
         populate_by_name = True
 
 
@@ -41,7 +39,6 @@ class LLMCallbackMeta(BaseModel):
 
 
 class LLMCallbackResponse(BaseModel):
-    # 굳이 RootModel 안 쓰고, 그냥 Dict로 처리
     aspect_scores: Dict[str, int]
     rationales: Dict[str, str]
     usage: Usage

@@ -20,6 +20,5 @@ def normalize_llm_raw_to_quality_response(raw: Dict[str, Any]) -> LLMQualityResp
         quality_score=int(raw["quality_score"]),
         review_summary=str(raw["review_summary"]),
         scores_by_category=scores,
-        # 카테고리별 코멘트 dict 그대로 유지 (bug, maintainability, style, security)
         review_details={k: str(v) for k, v in raw_details.items()},
     )

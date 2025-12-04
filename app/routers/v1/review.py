@@ -1,11 +1,11 @@
 from uuid import uuid4
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from hashlib import sha256
 from typing import List, Dict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func, case, and_, desc
 from sqlalchemy.orm import joinedload
 
 from app.utils.database import get_session
@@ -26,6 +26,10 @@ from app.schemas.review import (
     ReviewListItem,
     FixResponseBody, 
     FixRequest,
+    ModelStatsResponse,
+    ModelStatsItem,
+    UserStatsResponse,
+    UserStatsItem,
 )
 from app.services.llm_client import review_code
 from app.services.review_service import save_review_result
@@ -62,6 +66,12 @@ def build_audit_value(audit_dt: datetime | None) -> str:
 async def emit_review_event(event_type: str, payload: dict) -> None:
     await ws_manager.broadcast({"type": event_type, "payload": payload})
 
+def parse_date_utc(date_str: str | None) -> datetime | None:
+    if not date_str:
+        return None
+    dt = datetime.strptime(date_str, "%Y-%m-%d")
+    return dt.replace(tzinfo=timezone.utc)
+
 
 # ─────────────────────────────────────────
 #  POST /v1/reviews/request
@@ -75,7 +85,6 @@ async def create_review_request(
     meta = envelope.meta
     body = envelope.body
 
-    # 1) 유효성 검사
     if not body.snippet or not body.snippet.code:
         raise HTTPException(status_code=400, detail="code snippet is empty")
 
@@ -83,7 +92,6 @@ async def create_review_request(
     if not github_id:
         raise HTTPException(status_code=400, detail="meta.github_id is required")
 
-    # 2) GitHub ID → User 매핑
     result = await session.execute(select(User).where(User.github_id == str(github_id)))
     user = result.scalar_one_or_none()
     if not user:
@@ -112,7 +120,6 @@ async def create_review_request(
 
     code_fingerprint = make_code_fingerprint(body.snippet.code)
 
-    # 이벤트: 요청 수신
     await emit_review_event(
         "review_request_received",
         {
@@ -127,7 +134,6 @@ async def create_review_request(
         },
     )
 
-    # 3) LLM 호출
     llm_req = LLMRequest(
         code=body.snippet.code,
         language=language,
@@ -160,7 +166,6 @@ async def create_review_request(
         },
     )
 
-    # 4) DB 저장 (ReviewMeta + Review + ReviewCategoryResult)
     review: Review = await save_review_result(
         session,
         github_id=str(github_id),
@@ -171,12 +176,10 @@ async def create_review_request(
         code_fingerprint=code_fingerprint,
     )
 
-    # 🔐 여기서 ReviewMeta.github_id가 비어 있으면 채워넣기
     meta_row = await session.get(ReviewMeta, review.meta_id)
     if meta_row and not meta_row.github_id:
         meta_row.github_id = str(github_id)
         session.add(meta_row)
-        # commit은 아래에서 ActionLog까지 같이 할 거라 여기서는 flush만 되어도 충분
 
     await emit_review_event(
         "review_saved",
@@ -188,7 +191,6 @@ async def create_review_request(
         },
     )
 
-    # 5) ActionLog
     session.add(
         ActionLog(
             user_id=user_id,
@@ -205,7 +207,6 @@ async def create_review_request(
     )
     await session.commit()
 
-    # 6) 완료 이벤트
     await emit_review_event(
         "review_completed",
         {
@@ -222,7 +223,6 @@ async def create_review_request(
         },
     )
 
-    # 7) 응답 meta/body
     now = datetime.now(timezone.utc)
     audit_value = build_audit_value(now)
 
@@ -418,7 +418,6 @@ async def get_review_raw(
     if not meta_db:
         raise HTTPException(status_code=500, detail="meta not found for review")
 
-    # 카테고리 점수/코멘트 매핑
     cat_map: Dict[str, ReviewCategoryResult] = {c.category: c for c in review.categories}
 
     def score(name: str) -> int:
@@ -479,12 +478,10 @@ async def get_fix_review(
     if not review:
         raise HTTPException(status_code=404, detail="review not found")
 
-    # meta는 응답에 안 쓰지만, 없는 건 말이 안 되니까 체크만
     meta_db: ReviewMeta | None = review.meta
     if not meta_db:
         raise HTTPException(status_code=500, detail="meta not found for review")
 
-    # 카테고리별 코멘트 맵
     cat_map: Dict[str, ReviewCategoryResult] = {c.category: c for c in review.categories}
 
     def comment(name: str) -> str:
@@ -498,9 +495,182 @@ async def get_fix_review(
         "security": comment("security"),
     }
 
-    # code는 DB에서 안 꺼내고 VS Code가 보낸 payload.code 그대로 사용
     return FixResponseBody(
         code=payload.code,
         summary=review.summary,
         comments=comments,
     )
+
+@router.get("/stats/by-model", response_model=ModelStatsResponse)
+async def get_stats_by_model(
+    session: AsyncSession = Depends(get_session),
+    from_: str | None = Query(None, alias="from"),
+    to: str | None = Query(None, alias="to"),
+) -> ModelStatsResponse:
+    from_dt = parse_date_utc(from_)
+    to_dt = parse_date_utc(to)
+
+    if to_dt:
+        # to 는 inclusive로 받고, 실제 쿼리는 다음날 00시 미만
+        to_dt = to_dt + timedelta(days=1)
+
+    conditions = []
+    if from_dt:
+        conditions.append(ReviewMeta.audit >= from_dt)
+    if to_dt:
+        conditions.append(ReviewMeta.audit < to_dt)
+
+    # 🔥 기준을 Review 가 아니라 ReviewMeta 로 바꾸고,
+    # Review / ReviewCategoryResult 는 OUTER JOIN 으로 붙인다.
+    stmt = (
+        select(
+            ReviewMeta.model.label("model"),
+            func.count(func.distinct(Review.id)).label("review_count"),
+            func.avg(Review.quality_score).label("avg_total"),
+            func.avg(
+                case(
+                    (ReviewCategoryResult.category == "bug", ReviewCategoryResult.score),
+                    else_=None,
+                )
+            ).label("avg_bug"),
+            func.avg(
+                case(
+                    (
+                        ReviewCategoryResult.category == "maintainability",
+                        ReviewCategoryResult.score,
+                    ),
+                    else_=None,
+                )
+            ).label("avg_maintainability"),
+            func.avg(
+                case(
+                    (ReviewCategoryResult.category == "style", ReviewCategoryResult.score),
+                    else_=None,
+                )
+            ).label("avg_style"),
+            func.avg(
+                case(
+                    (ReviewCategoryResult.category == "security", ReviewCategoryResult.score),
+                    else_=None,
+                )
+            ).label("avg_security"),
+        )
+        .select_from(ReviewMeta)
+        .outerjoin(Review, Review.meta_id == ReviewMeta.id)
+        .outerjoin(ReviewCategoryResult, ReviewCategoryResult.review_id == Review.id)
+        .group_by(ReviewMeta.model)
+        .order_by(ReviewMeta.model)
+    )
+
+    if conditions:
+        stmt = stmt.where(and_(*conditions))
+
+    result = await session.execute(stmt)
+    rows = result.all()
+
+    items: list[ModelStatsItem] = []
+    for row in rows:
+        items.append(
+            ModelStatsItem(
+                model=row.model,
+                review_count=int(row.review_count or 0),
+                avg_total=float(row.avg_total) if row.avg_total is not None else None,
+                avg_bug=float(row.avg_bug) if row.avg_bug is not None else None,
+                avg_maintainability=float(row.avg_maintainability)
+                if row.avg_maintainability is not None
+                else None,
+                avg_style=float(row.avg_style) if row.avg_style is not None else None,
+                avg_security=float(row.avg_security) if row.avg_security is not None else None,
+            )
+        )
+
+    return ModelStatsResponse(data=items)
+
+@router.get("/stats/by-user", response_model=UserStatsResponse)
+async def get_stats_by_user(
+    session: AsyncSession = Depends(get_session),
+    from_: str | None = Query(None, alias="from"),
+    to: str | None = Query(None, alias="to"),
+    model: str | None = Query(None),
+    limit: int | None = Query(None, ge=1),
+) -> UserStatsResponse:
+    from_dt = parse_date_utc(from_)
+    to_dt = parse_date_utc(to)
+    if to_dt:
+        to_dt = to_dt + timedelta(days=1)
+
+    conditions = []
+    if from_dt:
+        conditions.append(ReviewMeta.audit >= from_dt)
+    if to_dt:
+        conditions.append(ReviewMeta.audit < to_dt)
+    if model:
+        conditions.append(ReviewMeta.model == model)
+
+    stmt = (
+        select(
+            User.id.label("user_id"),
+            User.github_id.label("github_id"),
+            func.count(func.distinct(Review.id)).label("review_count"),
+            func.avg(Review.quality_score).label("avg_total"),
+            func.avg(
+                case(
+                    (ReviewCategoryResult.category == "bug", ReviewCategoryResult.score),
+                    else_=None,
+                )
+            ).label("avg_bug"),
+            func.avg(
+                case(
+                    (
+                        ReviewCategoryResult.category == "maintainability",
+                        ReviewCategoryResult.score,
+                    ),
+                    else_=None,
+                )
+            ).label("avg_maintainability"),
+            func.avg(
+                case(
+                    (ReviewCategoryResult.category == "style", ReviewCategoryResult.score),
+                    else_=None,
+                )
+            ).label("avg_style"),
+            func.avg(
+                case(
+                    (ReviewCategoryResult.category == "security", ReviewCategoryResult.score),
+                    else_=None,
+                )
+            ).label("avg_security"),
+        )
+        .join(ReviewMeta, Review.meta_id == ReviewMeta.id)
+        .join(User, User.github_id == ReviewMeta.github_id) 
+        .join(ReviewCategoryResult, ReviewCategoryResult.review_id == Review.id)
+        .group_by(User.id, User.github_id)
+        .order_by(desc(func.avg(Review.quality_score)))  
+    )
+
+    if conditions:
+        stmt = stmt.where(and_(*conditions))
+    if limit:
+        stmt = stmt.limit(limit)
+
+    result = await session.execute(stmt)
+    rows = result.all()
+
+    items: list[UserStatsItem] = []
+    for row in rows:
+        items.append(
+            UserStatsItem(
+                user_id=int(row.user_id),
+                github_id=row.github_id,
+                review_count=int(row.review_count or 0),
+                avg_total=float(row.avg_total) if row.avg_total is not None else None,
+                avg_bug=float(row.avg_bug) if row.avg_bug is not None else None,
+                avg_maintainability=float(row.avg_maintainability)
+                if row.avg_maintainability is not None
+                else None,
+                avg_style=float(row.avg_style) if row.avg_style is not None else None,
+                avg_security=float(row.avg_security) if row.avg_security is not None else None,
+            )
+        )
+
+    return UserStatsResponse(data=items)

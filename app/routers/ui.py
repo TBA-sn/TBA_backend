@@ -52,7 +52,7 @@ async def _get_current_user(
 
 def build_code_request_payload(
     *,
-    user_id: int,        # 의미상 남겨둠 (현재는 사용 안 함)
+    user_id: int,
     github_id: str,
     model_id: str,
     language: str,
@@ -119,7 +119,6 @@ async def review_submit(
     code: str = Form(...),
     session: AsyncSession = Depends(get_session),
 ):
-    # 1) 유저 ID 결정 (쿠키 우선, 없으면 폼의 user_id)
     try:
         uid = get_current_user_id_from_cookie(request)
     except Exception:
@@ -131,19 +130,15 @@ async def review_submit(
     if uid is None:
         return RedirectResponse(url="/auth/github/login", status_code=303)
 
-    # 2) DB에서 github_id 조회
     row = await session.execute(select(User).where(User.id == int(uid)))
     user = row.scalar_one_or_none()
     if not user or not user.github_id:
-        # 깃허브 로그인 안 돼 있거나 github_id 없는 경우 다시 로그인으로
         return RedirectResponse(url="/auth/github/login", status_code=303)
 
     github_id = str(user.github_id)
 
-    # 3) criteria/aspects (지금은 체크박스 같은 거 없으니까 빈 리스트)
     criteria: List[str] = []
 
-    # 4) /v1/reviews/request 로 보낼 payload 생성
     payload = build_code_request_payload(
         user_id=int(uid),
         github_id=github_id,
@@ -198,7 +193,6 @@ async def review_detail(
 
     user = await _get_current_user(request, session)
 
-    # 현재는 quality / category_rows 안 채우고, 템플릿에서 fallback 로직 사용
     return templates.TemplateResponse(
         "ui/review_detail.html",
         {
@@ -284,7 +278,6 @@ async def api_test_submit(
     criteria: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
 ):
-    # 1) 현재 로그인 유저 확인
     user = await _get_current_user(request, session)
     effective_user_id: Optional[int] = None
 
@@ -296,7 +289,6 @@ async def api_test_submit(
     if effective_user_id is None:
         return RedirectResponse(url="/auth/github/login", status_code=303)
 
-    # 2) DB에서 github_id 조회
     row = await session.execute(select(User).where(User.id == effective_user_id))
     effective_user = row.scalar_one_or_none()
     if not effective_user or not effective_user.github_id:
@@ -304,20 +296,17 @@ async def api_test_submit(
 
     github_id = str(effective_user.github_id)
 
-    # criteria 문자열 → 리스트
     if criteria:
         crit_list = [c.strip() for c in criteria.split(",") if c.strip()]
     else:
         crit_list = []
 
-    # LLM 디버깅용 payload (화면에 보여주는 용도)
     llm_payload = {
         "code": code,
         "model": model_id,
         "criteria": crit_list,
     }
 
-    # 3) Authorization 토큰 결정
     final_token: str | None = None
     access_cookie = request.cookies.get("access_token")
 
@@ -326,7 +315,6 @@ async def api_test_submit(
     elif access_cookie:
         final_token = access_cookie
     else:
-        # 디버그용 토큰 발급 엔드포인트 호출
         debug_url = f"{INTERNAL_API_BASE}/auth/github/debug/mint?user_id={effective_user_id}"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
@@ -337,7 +325,6 @@ async def api_test_submit(
         except Exception:
             final_token = None
 
-    # 4) /v1/reviews/request 에 보낼 최종 payload
     payload = build_code_request_payload(
         user_id=effective_user_id,
         github_id=github_id,

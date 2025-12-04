@@ -33,8 +33,8 @@ async def _load_default_criteria(session: AsyncSession) -> list[str]:
         await session.execute(
             select(CriteriaMaster)
             .where(
-                CriteriaMaster.enabled == True,    # noqa: E712
-                CriteriaMaster.is_default == True,  # noqa: E712
+                CriteriaMaster.enabled == True,
+                CriteriaMaster.is_default == True,
             )
             .order_by(CriteriaMaster.sort_order.asc(), CriteriaMaster.id.asc())
         )

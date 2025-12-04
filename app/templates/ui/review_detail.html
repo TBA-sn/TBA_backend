@@ -5,7 +5,6 @@
 <h2>리뷰 #{{ rec.id }}</h2>
 
 <p>
-  {# Review 모델에 user_id / model / trigger / language 없을 수도 있어서, 없으면 빈값 찍히게 둠 #}
   <b>user_id</b>: {{ rec.user_id or '' }}
   | <b>model</b>: {{ rec.model or '' }}
   | <b>trigger</b>: {{ rec.trigger or '' }}
@@ -15,17 +14,14 @@
 
 <h3>요약</h3>
 {% if quality %}
-  {# LLM에서 온 review_summary 우선 사용 #}
   <p>{{ quality.review_summary }}</p>
 {% else %}
-  {# LLM 정보 없으면 DB에 저장된 summary 사용 #}
   <p>{{ rec.summary or '요약 없음' }}</p>
 {% endif %}
 
 <h3>점수</h3>
 
 {% if quality %}
-  {# 🔥 LLM JSON → LLMQualityResponse 기준으로 출력 #}
   <ul>
     <li>quality_score: {{ quality.quality_score }}</li>
     <li>bug: {{ quality.scores_by_category.bug }}</li>
@@ -55,7 +51,6 @@
   </thead>
   <tbody>
     {% if category_rows %}
-      {# 🔥 ui.py에서 만든 카테고리 행들: bug / maintainability / style / security #}
       {% for row in category_rows %}
         <tr>
           <td>{{ row.category }}</td>

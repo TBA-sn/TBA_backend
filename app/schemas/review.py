@@ -150,3 +150,31 @@ class FixResponseBody(BaseModel):
     code: str
     summary: str
     comments: Dict[str, str]
+
+class ModelStatsItem(BaseModel):
+    model: Optional[str]
+    review_count: int
+    avg_total: Optional[float]
+    avg_bug: Optional[float]
+    avg_maintainability: Optional[float]
+    avg_style: Optional[float]
+    avg_security: Optional[float]
+
+
+class ModelStatsResponse(BaseModel):
+    data: List[ModelStatsItem]
+
+
+class UserStatsItem(BaseModel):
+    user_id: int
+    github_id: Optional[str]
+    review_count: int
+    avg_total: Optional[float]
+    avg_bug: Optional[float]
+    avg_maintainability: Optional[float]
+    avg_style: Optional[float]
+    avg_security: Optional[float]
+
+
+class UserStatsResponse(BaseModel):
+    data: List[UserStatsItem]
