@@ -55,11 +55,11 @@ def make_code_fingerprint(code: str) -> str:
 
 
 def build_audit_value(audit_dt: datetime | None) -> str:
-    """ReviewMeta.audit(datetime) → ISO8601 문자열(Z 포함)로 변환"""
+    """UTC → KST 변환 후 ISO 문자열 반환"""
     if not audit_dt:
         audit_dt = datetime.now(timezone.utc)
-    return audit_dt.isoformat().replace("+00:00", "Z")
-
+    kst = audit_dt.astimezone(timezone(timedelta(hours=9)))
+    return kst.isoformat().replace("+09:00", "")
 
 async def emit_review_event(event_type: str, payload: dict) -> None:
     await ws_manager.broadcast({"type": event_type, "payload": payload})

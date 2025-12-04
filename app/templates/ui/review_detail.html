@@ -5,11 +5,11 @@
 <h2>리뷰 #{{ rec.id }}</h2>
 
 <p>
-  <b>user_id</b>: {{ rec.user_id or '' }}
-  | <b>model</b>: {{ rec.model or '' }}
-  | <b>trigger</b>: {{ rec.trigger or '' }}
-  | <b>language</b>: {{ rec.language or 'N/A' }}
-  | <b>created_at</b>: {{ rec.created_at }}
+  <b>user</b>: {{ rec.meta.github_id or '' }}
+  | <b>model</b>: {{ rec.meta.model or '' }}
+  | <b>trigger</b>: {{ rec.meta.trigger or '' }}
+  | <b>language</b>: {{ rec.meta.language or 'N/A' }}
+  | <b>audit</b>: {{ rec.meta.audit }}
 </p>
 
 <h3>요약</h3>
@@ -30,7 +30,6 @@
     </tr>
   </thead>
   <tbody>
-    {# Review.categories (ReviewCategoryResult 리스트)를 그대로 사용 #}
     {% if rec.categories %}
       {% for row in rec.categories %}
         <tr>
