@@ -1,0 +1,65 @@
+{% extends "ui/base.html" %}
+{% block title %}유저별 통계{% endblock %}
+
+{% block content %}
+<h2>유저별 리뷰 통계</h2>
+
+<form method="get" action="" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0;">
+  <div style="display:flex;flex-direction:column;gap:4px;min-width:140px;">
+    <label>from (YYYY-MM-DD)</label>
+    <input type="date" name="from" value="{{ from or '' }}" />
+  </div>
+  <div style="display:flex;flex-direction:column;gap:4px;min-width:140px;">
+    <label>to (YYYY-MM-DD)</label>
+    <input type="date" name="to" value="{{ to or '' }}" />
+  </div>
+  <div style="display:flex;flex-direction:column;gap:4px;min-width:160px;">
+    <label>model (optional)</label>
+    <input type="text" name="model" placeholder="예: gpt-4.1-mini" value="{{ model or '' }}" />
+  </div>
+  <div style="display:flex;flex-direction:column;gap:4px;min-width:100px;">
+    <label>limit</label>
+    <input type="number" name="limit" min="1" placeholder="100" value="{{ limit or '' }}" />
+  </div>
+  <div style="margin-top:20px;">
+    <input type="submit" value="필터 적용" />
+  </div>
+</form>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>user_id</th>
+      <th>github_id</th>
+      <th>review_count</th>
+      <th>avg_total</th>
+      <th>avg_bug</th>
+      <th>avg_maintainability</th>
+      <th>avg_style</th>
+      <th>avg_security</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if items and items|length > 0 %}
+      {% for u in items %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ u.user_id }}</td>
+          <td>{{ u.github_id or '-' }}</td>
+          <td>{{ u.review_count }}</td>
+          <td>{{ '%.1f'|format(u.avg_total) if u.avg_total is not none else '-' }}</td>
+          <td>{{ '%.1f'|format(u.avg_bug) if u.avg_bug is not none else '-' }}</td>
+          <td>{{ '%.1f'|format(u.avg_maintainability) if u.avg_maintainability is not none else '-' }}</td>
+          <td>{{ '%.1f'|format(u.avg_style) if u.avg_style is not none else '-' }}</td>
+          <td>{{ '%.1f'|format(u.avg_security) if u.avg_security is not none else '-' }}</td>
+        </tr>
+      {% endfor %}
+    {% else %}
+      <tr>
+        <td colspan="9" style="text-align:center;">데이터가 없습니다.</td>
+      </tr>
+    {% endif %}
+  </tbody>
+</table>
+{% endblock %}

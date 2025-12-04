@@ -17,7 +17,6 @@ class ConnectionManager:
             self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict):
-        # dict → json 문자열로 변환
         data = json.dumps(message, ensure_ascii=False)
         to_remove = []
         for conn in self.active_connections:
@@ -34,11 +33,10 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# 편하게 쓰려고 만든 helper
 async def trace(event: str, step: int | None = None, payload: dict | None = None):
     msg = {
-        "event": event,            # ex) "review_request_created"
-        "step": step,              # ex) 1~6 단계 번호
-        "payload": payload or {},  # 추가 데이터
+        "event": event,
+        "step": step,
+        "payload": payload or {},
     }
     await manager.broadcast(msg)

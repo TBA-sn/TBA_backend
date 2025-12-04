@@ -23,7 +23,7 @@ from app.schemas.analysis import (
     AnalysisStoredOut,
 )
 from app.schemas.review import LLMRequest, LLMQualityResponse
-from app.services.llm_client import review_code
+from app.services.llm_clientt import review_code
 
 router = APIRouter(prefix="/v1/analysis/llm", tags=["analysis-llm"])
 

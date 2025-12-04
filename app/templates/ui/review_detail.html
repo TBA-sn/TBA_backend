@@ -13,32 +13,12 @@
 </p>
 
 <h3>요약</h3>
-{% if quality %}
-  <p>{{ quality.review_summary }}</p>
-{% else %}
-  <p>{{ rec.summary or '요약 없음' }}</p>
-{% endif %}
+<p>{{ rec.summary or '요약 없음' }}</p>
 
 <h3>점수</h3>
-
-{% if quality %}
-  <ul>
-    <li>quality_score: {{ quality.quality_score }}</li>
-    <li>bug: {{ quality.scores_by_category.bug }}</li>
-    <li>maintainability: {{ quality.scores_by_category.maintainability }}</li>
-    <li>style: {{ quality.scores_by_category.style }}</li>
-    <li>security: {{ quality.scores_by_category.security }}</li>
-  </ul>
-{% else %}
-  {# LLMQualityResponse 못 만들었을 때 기존 rec 필드 fallback #}
-  <ul>
-    <li>quality_score: {{ rec.quality_score }}</li>
-    <li>bug: {{ rec.score_bug }}</li>
-    <li>maintainability: {{ rec.score_maintainability }}</li>
-    <li>style: {{ rec.score_style }}</li>
-    <li>security: {{ rec.score_security }}</li>
-  </ul>
-{% endif %}
+<ul>
+  <li>quality_score: {{ rec.quality_score }}</li>
+</ul>
 
 <h3>카테고리별 코멘트</h3>
 <table>
@@ -50,35 +30,20 @@
     </tr>
   </thead>
   <tbody>
-    {% if category_rows %}
-      {% for row in category_rows %}
+    {# Review.categories (ReviewCategoryResult 리스트)를 그대로 사용 #}
+    {% if rec.categories %}
+      {% for row in rec.categories %}
         <tr>
           <td>{{ row.category }}</td>
           <td>{{ row.score }}</td>
-          <td>{{ row.comment }}</td>
+          <td>{{ row.comment or '-' }}</td>
         </tr>
       {% endfor %}
     {% else %}
-      {# fallback: 기존 rec.* 코멘트 사용 #}
       <tr>
-        <td>bug</td>
-        <td>{{ rec.score_bug }}</td>
-        <td>{{ rec.comment_bug or '-' }}</td>
-      </tr>
-      <tr>
-        <td>maintainability</td>
-        <td>{{ rec.score_maintainability }}</td>
-        <td>{{ rec.comment_maintainability or '-' }}</td>
-      </tr>
-      <tr>
-        <td>style</td>
-        <td>{{ rec.score_style }}</td>
-        <td>{{ rec.comment_style or '-' }}</td>
-      </tr>
-      <tr>
-        <td>security</td>
-        <td>{{ rec.score_security }}</td>
-        <td>{{ rec.comment_security or '-' }}</td>
+        <td colspan="3" style="text-align:center;color:#888;">
+          카테고리별 점수가 없습니다.
+        </td>
       </tr>
     {% endif %}
   </tbody>

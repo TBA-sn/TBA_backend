@@ -24,8 +24,6 @@ from app.schemas.review import (
     ReviewDetailResponse,
     ReviewListResponse,
     ReviewListItem,
-    FixResponseBody, 
-    FixRequest,
     ModelStatsResponse,
     ModelStatsItem,
     UserStatsResponse,
@@ -461,45 +459,6 @@ async def get_review_raw(
     return ReviewDetailResponse(meta=resp_meta, body=body)
 
 
-@router.post("/fix", response_model=FixResponseBody)
-async def get_fix_review(
-    payload: FixRequest,
-    session: AsyncSession = Depends(get_session),
-) -> FixResponseBody:
-    review_id = payload.review_id
-
-    stmt = (
-        select(Review)
-        .options(joinedload(Review.meta), joinedload(Review.categories))
-        .where(Review.id == review_id)
-    )
-    result = await session.execute(stmt)
-    review: Review | None = result.unique().scalar_one_or_none()
-    if not review:
-        raise HTTPException(status_code=404, detail="review not found")
-
-    meta_db: ReviewMeta | None = review.meta
-    if not meta_db:
-        raise HTTPException(status_code=500, detail="meta not found for review")
-
-    cat_map: Dict[str, ReviewCategoryResult] = {c.category: c for c in review.categories}
-
-    def comment(name: str) -> str:
-        c = cat_map.get(name)
-        return c.comment or "" if c and c.comment is not None else ""
-
-    comments = {
-        "bug": comment("bug"),
-        "maintainability": comment("maintainability"),
-        "style": comment("style"),
-        "security": comment("security"),
-    }
-
-    return FixResponseBody(
-        code=payload.code,
-        summary=review.summary,
-        comments=comments,
-    )
 
 @router.get("/stats/by-model", response_model=ModelStatsResponse)
 async def get_stats_by_model(
@@ -511,7 +470,6 @@ async def get_stats_by_model(
     to_dt = parse_date_utc(to)
 
     if to_dt:
-        # to 는 inclusive로 받고, 실제 쿼리는 다음날 00시 미만
         to_dt = to_dt + timedelta(days=1)
 
     conditions = []
@@ -520,8 +478,6 @@ async def get_stats_by_model(
     if to_dt:
         conditions.append(ReviewMeta.audit < to_dt)
 
-    # 🔥 기준을 Review 가 아니라 ReviewMeta 로 바꾸고,
-    # Review / ReviewCategoryResult 는 OUTER JOIN 으로 붙인다.
     stmt = (
         select(
             ReviewMeta.model.label("model"),

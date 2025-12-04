@@ -1,0 +1,51 @@
+{% extends "ui/base.html" %}
+{% block title %}코드 Fix 테스트{% endblock %}
+
+{% block content %}
+<h2>코드 Fix 테스트</h2>
+
+<form method="post" action="/ui/fix-test" style="display:grid;gap:12px;max-width:900px;">
+
+  <div style="display:grid;grid-template-columns:160px 1fr;gap:8px;align-items:center;">
+    <label>review_id</label>
+    <input type="number" name="review_id" placeholder="예: 123"
+           value="{{ review_id or '' }}" required />
+  </div>
+
+  <div style="display:grid;grid-template-columns:160px 1fr;gap:8px;">
+    <label>code (VS Code에서 보낸 현재 코드)</label>
+    <textarea name="code" rows="12" placeholder="여기에 현재 코드를 붙여넣으세요" required>{{ code or '' }}</textarea>
+  </div>
+
+  <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+    <button type="submit" class="button">/v1/fix 호출</button>
+    <a class="button" href="/ui/fix-test">초기화</a>
+  </div>
+</form>
+
+{% if status is not none %}
+  <hr/>
+
+  <h3>보낸 페이로드 (/v1/fix)</h3>
+  <pre style="background:#222;color:#ddd;padding:10px;border-radius:8px;overflow:auto;white-space:pre-wrap;">
+{{ sent_pretty | safe }}
+  </pre>
+
+  <h3>응답 상태</h3>
+  <p style="color:#aaa;margin:4px 0;">status: {{ status }}</p>
+
+  {% if error %}
+    <h3>에러</h3>
+    <pre style="background:#400;color:#fee;padding:10px;border-radius:8px;overflow:auto;white-space:pre-wrap;">
+{{ error }}
+    </pre>
+  {% endif %}
+
+  {% if fixed_code %}
+    <h3>수정된 코드</h3>
+    <pre style="background:#111;color:#eee;padding:10px;border-radius:8px;overflow:auto;white-space:pre;">
+{{ fixed_code }}
+    </pre>
+  {% endif %}
+{% endif %}
+{% endblock %}

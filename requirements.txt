@@ -13,3 +13,6 @@ greenlet>=3.1
 httpx
 PyJWT==2.9.0
 cryptography
+openai
+jinja2
+json_repair 

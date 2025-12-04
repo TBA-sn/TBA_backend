@@ -12,7 +12,7 @@ class ActionLogOut(BaseModel):
     timestamp: datetime
     report_id: Optional[int]
     class Config:
-        from_attributes = True  # SQLAlchemy 모델 -> Pydantic 변환
+        from_attributes = True
 
 class ActionLogList(BaseModel):
     items: list[ActionLogOut]

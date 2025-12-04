@@ -12,7 +12,7 @@ from app.schemas.review import (
     ScoresByCategory,
     IssueSeverity,
 )
-from app.services.llm_client import review_code
+from app.services.llm_clientt import review_code
 
 router = APIRouter(prefix="/api/v1", tags=["review-api"])
 

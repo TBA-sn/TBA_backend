@@ -60,10 +60,7 @@ def build_code_request_payload(
     code: str,
     aspects: List[str],
 ) -> dict:
-    """
-    /v1/reviews/request 에 맞춘 envelope(meta + body) 생성
-    Meta 스키마(app.schemas.common.Meta)에 정확히 맞춘다.
-    """
+
 
     meta_obj = MetaSchema(
         github_id=github_id,
@@ -177,11 +174,6 @@ async def review_detail(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ):
-    """
-    일단은 ORM Review 그대로 가져와서 템플릿에 넘김.
-    (Review 모델에 없는 필드는 Jinja에서 그냥 빈 값으로 떨어지니까 에러 안 남)
-    나중에 필요하면 /v1/reviews/{id} API를 불러서 quality / category_rows 채워도 됨.
-    """
     stmt = (
         select(Review)
         .options(joinedload(Review.meta), joinedload(Review.categories))
@@ -216,9 +208,6 @@ async def review_list(
     session: AsyncSession = Depends(get_session),
     user_id: int | None = None,
 ):
-    """
-    ReviewMeta.audit 기준으로 최신순 정렬해서 리뷰 목록 조회
-    """
     stmt = (
         select(Review)
         .join(ReviewMeta, Review.meta_id == ReviewMeta.id)
@@ -413,3 +402,182 @@ async def review_logs(
 @router.get("/ws-debug")
 async def ws_debug_page(request: Request):
     return templates.TemplateResponse("ui/ws_debug.html", {"request": request})
+
+
+# =====================================================================
+# NEW: 모델별 통계 화면 (/ui/stats/models)
+# =====================================================================
+
+@router.get("/stats/models")
+async def stats_by_model_page(
+    request: Request,
+    from_: str | None = None,
+    to: str | None = None,
+):
+    params = {}
+    if from_:
+        params["from"] = from_
+    if to:
+        params["to"] = to
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(
+                f"{INTERNAL_API_BASE}/v1/reviews/stats/by-model",
+                params=params,
+            )
+        data = res.json()
+    except Exception as e:
+        data = {"error": str(e), "data": []}
+
+    user: Optional[User] = None
+    try:
+        session: AsyncSession = await get_session().__anext__()
+        user = await _get_current_user(request, session)
+    except Exception:
+        user = None
+
+    return templates.TemplateResponse(
+        "ui/stats_models.html",
+        {
+            "request": request,
+            "from": from_,
+            "to": to,
+            "items": data.get("data", []),
+            "error": data.get("error"),
+            "current_user_id": user.id if user else None,
+            "current_user_login": user.login if user else None,
+        },
+    )
+
+
+# =====================================================================
+# NEW: 유저별 통계 화면 (/ui/stats/users)
+# =====================================================================
+
+@router.get("/stats/users")
+async def stats_by_user_page(
+    request: Request,
+    from_: str | None = None,
+    to: str | None = None,
+    model: str | None = None,
+    limit: int | None = None,
+):
+    params = {}
+    if from_:
+        params["from"] = from_
+    if to:
+        params["to"] = to
+    if model:
+        params["model"] = model
+    if limit:
+        params["limit"] = limit
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(
+                f"{INTERNAL_API_BASE}/v1/reviews/stats/by-user",
+                params=params,
+            )
+        data = res.json()
+    except Exception as e:
+        data = {"error": str(e), "data": []}
+
+    user: Optional[User] = None
+    try:
+        session: AsyncSession = await get_session().__anext__()
+        user = await _get_current_user(request, session)
+    except Exception:
+        user = None
+
+    return templates.TemplateResponse(
+        "ui/stats_users.html",
+        {
+            "request": request,
+            "from": from_,
+            "to": to,
+            "model": model,
+            "limit": limit,
+            "items": data.get("data", []),
+            "error": data.get("error"),
+            "current_user_id": user.id if user else None,
+            "current_user_login": user.login if user else None,
+        },
+    )
+
+
+# =====================================================================
+# NEW: Fix API 테스트 화면 (/ui/fix-test)
+# =====================================================================
+
+@router.get("/fix-test")
+async def fix_test_form(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    user = await _get_current_user(request, session)
+
+    return templates.TemplateResponse(
+        "ui/fix_test.html",
+        {
+            "request": request,
+            "fixed_code": None,           # 수정된 코드 (처음엔 없음)
+            "sent_pretty": None,          # 보낸 payload 미리보기
+            "status": None,               # HTTP status
+            "error": None,                # 에러 메시지 있으면 표시
+            "current_user_id": user.id if user else None,
+            "current_user_login": user.login if user else None,
+        },
+    )
+
+
+@router.post("/fix-test")
+async def fix_test_submit(
+    request: Request,
+    review_id: int = Form(...),
+    code: str = Form(...),
+):
+    payload = {
+        "review_id": review_id,
+        "code": code,
+    }
+
+    url = f"{INTERNAL_API_BASE}/v1/fix"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            res = await client.post(url, json=payload)
+        status = res.status_code
+        fixed_code = res.text            # 🔥 /v1/fix 가 str을 반환하므로 text 로 받기
+        error = None
+    except httpx.ReadTimeout:
+        fixed_code = ""
+        status = 504
+        error = "ReadTimeout: /v1/fix 응답이 너무 오래 걸렸습니다."
+    except Exception as e:
+        fixed_code = ""
+        status = 500
+        error = str(e)
+
+    pretty_sent = json.dumps(payload, ensure_ascii=False, indent=2)
+
+    # 유저 정보 (헤더용)
+    user: Optional[User] = None
+    try:
+        session: AsyncSession = await get_session().__anext__()
+        user = await _get_current_user(request, session)
+    except Exception:
+        user = None
+
+    return templates.TemplateResponse(
+        "ui/fix_test.html",
+        {
+            "request": request,
+            "fixed_code": fixed_code,     # 👈 여기만 보면 됨: 수정된 코드 원문
+            "sent_pretty": pretty_sent,   # 어떤 payload 보냈는지 확인용
+            "status": status,
+            "error": error,
+            "current_user_id": user.id if user else None,
+            "current_user_login": user.login if user else None,
+        },
+    )

@@ -15,7 +15,7 @@ from app.routers.v1.action_log import router as action_log_router
 from app.routers.llm import router as llm_router
 from app.routers.ws_debug import router as ws_debug_router
 from app.routers.v1.review_api import router as review_api_router
-
+from app.routers.v1.fix import router as fix_router
 from app.routers.auth import router as auth_router
 
 
@@ -51,7 +51,7 @@ app.include_router(review_api_router)
 app.include_router(ws_debug_router)
 app.include_router(auth_router)
 logging.getLogger("uvicorn.error").info("Auth router enabled.")
-
+app.include_router(fix_router)
 app.include_router(user_router)
 app.include_router(ui_router)
 
