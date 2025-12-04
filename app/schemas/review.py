@@ -22,38 +22,15 @@ class ReviewRequestBody(BaseModel):
 
 
 class ReviewRequest(BaseModel):
-    """
-    POST /v1/reviews/request 요청 바디
-
-    {
-      "meta": { ... Meta ... },
-      "body": {
-        "snippet": { "code": "..." }
-      }
-    }
-    """
     meta: Meta
     body: ReviewRequestBody
 
 
 class ReviewRequestResponseBody(BaseModel):
-    """
-    POST /v1/reviews/request 응답 body
-
-    {
-      "review_id": 123
-    }
-    """
     review_id: int
 
 
 class ReviewRequestResponse(BaseModel):
-    """
-    {
-      "meta": { ... Meta ... },
-      "body": { "review_id": 123 }
-    }
-    """
     meta: Meta
     body: ReviewRequestResponseBody
 
@@ -63,9 +40,6 @@ class ReviewRequestResponse(BaseModel):
 # ─────────────────────────────────────────
 
 class ScoresByCategory(BaseModel):
-    """
-    LLM / DB / 응답 공통으로 쓰는 카테고리 점수 구조
-    """
     bug: int = 0
     maintainability: int = 0
     style: int = 0
@@ -73,16 +47,11 @@ class ScoresByCategory(BaseModel):
 
 
 class LLMRequest(BaseModel):
-    """
-    app.services.llm_client.review_code() 에 넘기는 요청 타입
-    """
     code: str
     language: Optional[str] = None
     model: Optional[str] = None
     criteria: List[str] = Field(default_factory=list)
 
-
-# ===== /api/v1/review 간단 버전에서 쓰는 디테일 구조 =====
 
 from enum import Enum
 
@@ -102,7 +71,7 @@ class Category(str, Enum):
 
 class LLMReviewDetail(BaseModel):
     issue_id: str
-    issue_category: str          # 또는 Category 로 바꿔도 됨 (기존 코드 기준 맞추기)
+    issue_category: str
     issue_severity: IssueSeverity
     issue_summary: str
     issue_details: str
@@ -111,25 +80,16 @@ class LLMReviewDetail(BaseModel):
 
 
 class LLMResponse(BaseModel):
-    """
-    옛날 generic LLM 응답 (review_api 등에서 쓸 수 있음)
-    """
     quality_score: float
     review_summary: str
     scores_by_category: Dict[str, float]
     review_details: List[LLMReviewDetail]
 
 
-# ===== 새로운 LLM 품질 응답 (v1/reviews에서 사용) =====
-
 class LLMQualityResponse(BaseModel):
-    """
-    v1/reviews 파이프라인에서 사용하는 LLM 결과 타입
-    """
     quality_score: int
     review_summary: str
     scores_by_category: ScoresByCategory
-    # 카테고리 이름 -> 요약 코멘트
     review_details: Dict[str, str]
 
 
@@ -138,16 +98,6 @@ class LLMQualityResponse(BaseModel):
 # ─────────────────────────────────────────
 
 class ReviewResultBody(BaseModel):
-    """
-    /v1/reviews/{review_id} 의 body 부분
-
-    {
-      "quality_score": 96,
-      "summary": "...",
-      "scores_by_category": { ... },
-      "comments": { ... }
-    }
-    """
     quality_score: int
     summary: str
     scores_by_category: ScoresByCategory
@@ -155,54 +105,15 @@ class ReviewResultBody(BaseModel):
 
 
 class ReviewDetailResponse(BaseModel):
-    """
-    /v1/reviews/{review_id} 최종 응답
-
-    {
-      "meta": { ... Meta ... },
-      "body": {
-        "quality_score": ...,
-        "summary": "...",
-        "scores_by_category": { ... },
-        "comments": { ... }
-      }
-    }
-    """
     meta: Meta
     body: ReviewResultBody
 
 
-# ─────────────────────────────────────────
-# /api/v1/review (간단 버전) – review_api.py에서 사용
-# ─────────────────────────────────────────
-
 class ReviewAPIRequest(BaseModel):
-    """
-    /api/v1/review 요청
-
-    {
-      "code_snippet": "..."
-    }
-    """
     code_snippet: str
 
 
 class ReviewAPIResponse(BaseModel):
-    """
-    /api/v1/review 응답
-
-    {
-      "quality_score": ...,
-      "review_summary": "...",
-      "scores_by_category": {
-        "bug": ...,
-        "maintainability": ...,
-        "style": ...,
-        "security": ...
-      },
-      "review_details": [ ... LLMReviewDetail ... ]
-    }
-    """
     quality_score: float
     review_summary: str
     scores_by_category: Dict[str, float]
@@ -229,3 +140,13 @@ class ReviewListItem(BaseModel):
 class ReviewListResponse(BaseModel):
     meta: Meta
     body: List[ReviewListItem]
+
+class FixRequest(BaseModel):
+    review_id: int
+    code: str
+
+
+class FixResponseBody(BaseModel):
+    code: str
+    summary: str
+    comments: Dict[str, str]

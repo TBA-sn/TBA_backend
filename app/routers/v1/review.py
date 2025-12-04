@@ -24,6 +24,8 @@ from app.schemas.review import (
     ReviewDetailResponse,
     ReviewListResponse,
     ReviewListItem,
+    FixResponseBody, 
+    FixRequest,
 )
 from app.services.llm_client import review_code
 from app.services.review_service import save_review_result
@@ -311,72 +313,6 @@ async def list_reviews(
         )
 
     return ReviewListResponse(meta=meta, body=body)
-# ─────────────────────────────────────────
-#  GET /v1/reviews/{review_id}
-# ─────────────────────────────────────────
-
-@router.get("/{review_id}", response_model=ReviewDetailResponse)
-async def get_review_raw(
-    review_id: int,
-    session: AsyncSession = Depends(get_session),
-):
-    stmt = (
-        select(Review)
-        .options(joinedload(Review.meta), joinedload(Review.categories))
-        .where(Review.id == review_id)
-    )
-    result = await session.execute(stmt)
-    review: Review | None = result.unique().scalar_one_or_none()
-    if not review:
-        raise HTTPException(status_code=404, detail="review not found")
-
-    meta_db: ReviewMeta | None = review.meta
-    if not meta_db:
-        raise HTTPException(status_code=500, detail="meta not found for review")
-
-    # 카테고리 점수/코멘트 매핑
-    cat_map: Dict[str, ReviewCategoryResult] = {c.category: c for c in review.categories}
-
-    def score(name: str) -> int:
-        c = cat_map.get(name)
-        return int(c.score) if c and c.score is not None else 0
-
-    def comment(name: str) -> str:
-        c = cat_map.get(name)
-        return c.comment or "" if c and c.comment is not None else ""
-
-    body = ReviewResultBody(
-        quality_score=int(review.quality_score),
-        summary=review.summary,
-        scores_by_category=ScoresByCategory(
-            bug=score("bug"),
-            maintainability=score("maintainability"),
-            style=score("style"),
-            security=score("security"),
-        ),
-        comments={
-            "bug": comment("bug"),
-            "maintainability": comment("maintainability"),
-            "style": comment("style"),
-            "security": comment("security"),
-        },
-    )
-
-    resp_meta = Meta(
-        github_id=meta_db.github_id,
-        review_id=review.id,
-        version=meta_db.version,
-        actor="server",
-        language=meta_db.language,
-        trigger=meta_db.trigger,
-        code_fingerprint=meta_db.code_fingerprint,
-        model=meta_db.model or "unknown",
-        result={"result_ref": str(review.id), "error_message": None},
-        audit=build_audit_value(meta_db.audit),
-    )
-
-    return ReviewDetailResponse(meta=resp_meta, body=body)
-
 
 # ─────────────────────────────────────────
 #  GET /v1/reviews/me
@@ -458,3 +394,113 @@ async def get_my_reviews(
         )
 
     return {"meta": meta.model_dump(), "body": body}
+
+# ─────────────────────────────────────────
+#  GET /v1/reviews/{review_id}
+# ─────────────────────────────────────────
+
+@router.get("/{review_id}", response_model=ReviewDetailResponse)
+async def get_review_raw(
+    review_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    stmt = (
+        select(Review)
+        .options(joinedload(Review.meta), joinedload(Review.categories))
+        .where(Review.id == review_id)
+    )
+    result = await session.execute(stmt)
+    review: Review | None = result.unique().scalar_one_or_none()
+    if not review:
+        raise HTTPException(status_code=404, detail="review not found")
+
+    meta_db: ReviewMeta | None = review.meta
+    if not meta_db:
+        raise HTTPException(status_code=500, detail="meta not found for review")
+
+    # 카테고리 점수/코멘트 매핑
+    cat_map: Dict[str, ReviewCategoryResult] = {c.category: c for c in review.categories}
+
+    def score(name: str) -> int:
+        c = cat_map.get(name)
+        return int(c.score) if c and c.score is not None else 0
+
+    def comment(name: str) -> str:
+        c = cat_map.get(name)
+        return c.comment or "" if c and c.comment is not None else ""
+
+    body = ReviewResultBody(
+        quality_score=int(review.quality_score),
+        summary=review.summary,
+        scores_by_category=ScoresByCategory(
+            bug=score("bug"),
+            maintainability=score("maintainability"),
+            style=score("style"),
+            security=score("security"),
+        ),
+        comments={
+            "bug": comment("bug"),
+            "maintainability": comment("maintainability"),
+            "style": comment("style"),
+            "security": comment("security"),
+        },
+    )
+
+    resp_meta = Meta(
+        github_id=meta_db.github_id,
+        review_id=review.id,
+        version=meta_db.version,
+        actor="server",
+        language=meta_db.language,
+        trigger=meta_db.trigger,
+        code_fingerprint=meta_db.code_fingerprint,
+        model=meta_db.model or "unknown",
+        result={"result_ref": str(review.id), "error_message": None},
+        audit=build_audit_value(meta_db.audit),
+    )
+
+    return ReviewDetailResponse(meta=resp_meta, body=body)
+
+
+@router.post("/fix", response_model=FixResponseBody)
+async def get_fix_review(
+    payload: FixRequest,
+    session: AsyncSession = Depends(get_session),
+) -> FixResponseBody:
+    review_id = payload.review_id
+
+    stmt = (
+        select(Review)
+        .options(joinedload(Review.meta), joinedload(Review.categories))
+        .where(Review.id == review_id)
+    )
+    result = await session.execute(stmt)
+    review: Review | None = result.unique().scalar_one_or_none()
+    if not review:
+        raise HTTPException(status_code=404, detail="review not found")
+
+    # meta는 응답에 안 쓰지만, 없는 건 말이 안 되니까 체크만
+    meta_db: ReviewMeta | None = review.meta
+    if not meta_db:
+        raise HTTPException(status_code=500, detail="meta not found for review")
+
+    # 카테고리별 코멘트 맵
+    cat_map: Dict[str, ReviewCategoryResult] = {c.category: c for c in review.categories}
+
+    def comment(name: str) -> str:
+        c = cat_map.get(name)
+        return c.comment or "" if c and c.comment is not None else ""
+
+    comments = {
+        "bug": comment("bug"),
+        "maintainability": comment("maintainability"),
+        "style": comment("style"),
+        "security": comment("security"),
+    }
+
+    # code는 DB에서 안 꺼내고 VS Code가 보낸 payload.code 그대로 사용
+    return FixResponseBody(
+        code=payload.code,
+        summary=review.summary,
+        comments=comments,
+    )

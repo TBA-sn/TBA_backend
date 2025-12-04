@@ -10,7 +10,6 @@ from app.schemas.review import (
     LLMRequest,
     LLMQualityResponse,
     ScoresByCategory,
-    LLMReviewDetail,
     IssueSeverity,
 )
 from app.services.llm_client import review_code
