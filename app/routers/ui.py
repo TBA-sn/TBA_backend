@@ -13,7 +13,6 @@ from sqlalchemy.orm import joinedload
 
 from app.utils.database import get_session
 from app.models.review import Review, ReviewMeta
-from app.models.action_log import ActionLog
 from app.models.user import User
 from app.routers.auth import get_current_user_id_from_cookie
 from app.schemas.common import Meta as MetaSchema
@@ -368,35 +367,6 @@ async def api_test_submit(
     )
 
 
-# =====================================================================
-# 리뷰 로그
-# =====================================================================
-
-@router.get("/review/{review_id}/logs")
-async def review_logs(
-    review_id: int,
-    request: Request,
-    session: AsyncSession = Depends(get_session),
-):
-    stmt = (
-        select(ActionLog)
-        .where(ActionLog.event_name == "REVIEW_REQUEST")
-        .order_by(ActionLog.timestamp.desc())
-    )
-    logs = (await session.execute(stmt)).scalars().all()
-
-    user = await _get_current_user(request, session)
-
-    return templates.TemplateResponse(
-        "ui/review_logs.html",
-        {
-            "request": request,
-            "review_id": review_id,
-            "logs": logs,
-            "current_user_id": user.id if user else None,
-            "current_user_login": user.login if user else None,
-        },
-    )
 
 
 @router.get("/ws-debug")

@@ -10,7 +10,6 @@ from sqlalchemy.orm import joinedload
 
 from app.utils.database import get_session
 from app.models.review import Review, ReviewMeta, ReviewCategoryResult
-from app.models.action_log import ActionLog
 from app.models.user import User
 from app.schemas.common import Meta
 from app.schemas.review import (
@@ -188,21 +187,7 @@ async def create_review_request(
             "user_id": user_id,
         },
     )
-
-    session.add(
-        ActionLog(
-            user_id=user_id,
-            event_name="REVIEW_REQUEST",
-            properties={
-                "github_id": str(github_id),
-                "correlation_id": correlation_id,
-                "language": language,
-                "model": model_id,
-                "review_id": int(review.id),
-                "trigger": trigger,
-            },
-        )
-    )
+    
     await session.commit()
 
     await emit_review_event(

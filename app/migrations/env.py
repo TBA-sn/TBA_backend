@@ -13,8 +13,7 @@ if proj_root not in sys.path:
 
 from app.utils.database import Base
 from app.models import user as user_models         
-from app.models import review as review_models     
-from app.models import action_log as action_models 
+from app.models import review as review_models
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
