@@ -432,6 +432,7 @@ async def get_review_raw(
             "style": comment("style"),
             "security": comment("security"),
         },
+        code=review.code,
     )
 
     resp_meta = Meta(
