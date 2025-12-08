@@ -135,7 +135,7 @@ class ReviewListItem(BaseModel):
     scores_by_category: ScoresByCategory
     comments: Dict[str, str]
     audit: str
-
+    code: Optional[str] = None
 
 class ReviewListResponse(BaseModel):
     meta: Meta

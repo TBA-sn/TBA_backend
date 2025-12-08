@@ -296,6 +296,7 @@ async def list_reviews(
                     "security": comment("security"),
                 },
                 audit=build_audit_value(rec_meta.audit),
+                code=rec.code,
             )
         )
 
@@ -377,6 +378,7 @@ async def get_my_reviews(
                     "security": comment("security"),
                 },
                 "audit": build_audit_value(rec_meta.audit),
+                "code": rec.code,
             }
         )
 
