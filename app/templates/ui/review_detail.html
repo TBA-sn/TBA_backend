@@ -12,6 +12,16 @@
   | <b>audit</b>: {{ rec.meta.audit }}
 </p>
 
+{# ───────────────── 코드 원문 ───────────────── #}
+<h3>코드</h3>
+{% if rec.code %}
+  <pre style="background:#f5f5f5;border:1px solid #ddd;padding:8px;overflow:auto;">
+<code>{{ rec.code }}</code>
+  </pre>
+{% else %}
+  <p style="color:#888;">저장된 코드가 없습니다 (store_code=0 인 경우).</p>
+{% endif %}
+
 <h3>요약</h3>
 <p>{{ rec.summary or '요약 없음' }}</p>
 
@@ -48,7 +58,4 @@
   </tbody>
 </table>
 
-<p style="margin-top:16px;">
-  <a href="/ui/review/{{ rec.id }}/logs">액션 로그 보기</a>
-</p>
 {% endblock %}

@@ -18,6 +18,7 @@
       <th>language</th>
       <th>quality_score</th>
       <th>audit</th>
+      <th>code</th>  {# 🔥 코드 미리보기 컬럼 추가 #}
       <th></th>
     </tr>
   </thead>
@@ -48,16 +49,25 @@
       </td>
       <td>{{ r.quality_score }}</td>
       <td>
-  {% if r.meta and r.meta.audit %}
-    {{ r.meta.audit }}
-  {% else %}
-    -
-  {% endif %}
-</td>
+        {% if r.meta and r.meta.audit %}
+          {{ r.meta.audit }}
+        {% else %}
+          -
+        {% endif %}
+      </td>
+      <td>
+        {% if r.code %}
+          <pre style="max-height:80px;overflow:auto;white-space:pre-wrap;font-size:12px;margin:0;">
+{{ r.code }}
+          </pre>
+        {% else %}
+          <span style="color:#888;">코드 없음</span>
+        {% endif %}
+      </td>
       <td><a class="button" href="/ui/review/{{ r.id }}">보기</a></td>
     </tr>
   {% else %}
-    <tr><td colspan="7" style="text-align:center;">리뷰가 없습니다</td></tr>
+    <tr><td colspan="8" style="text-align:center;">리뷰가 없습니다</td></tr>
   {% endfor %}
   </tbody>
 </table>
