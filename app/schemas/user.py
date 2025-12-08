@@ -21,9 +21,11 @@ class UserOut(BaseModel):
     login: str
     name: Optional[str] = None
     avatar_url: Optional[str] = None
-
+    store_code: bool
     model_config = ConfigDict(from_attributes=True)
 
+class UserStoreCodeUpdate(BaseModel):
+    store_code: bool
 
 
 

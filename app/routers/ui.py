@@ -60,7 +60,6 @@ def build_code_request_payload(
     aspects: List[str],
 ) -> dict:
 
-
     meta_obj = MetaSchema(
         github_id=github_id,
         review_id=None,
@@ -101,6 +100,7 @@ async def review_form(
         "request": request,
         "current_user_id": user.id if user else None,
         "current_user_login": user.login if user else None,
+        "current_user_store_code": user.store_code if user else None,  # 🔥 추가
     }
     return templates.TemplateResponse("ui/review_form.html", ctx)
 
@@ -193,6 +193,7 @@ async def review_detail(
             "category_rows": None,
             "current_user_id": user.id if user else None,
             "current_user_login": user.login if user else None,
+            "current_user_store_code": user.store_code if user else None,  # 🔥 추가
         },
     )
 
@@ -225,6 +226,7 @@ async def review_list(
             "user_id": user_id,
             "current_user_id": user.id if user else None,
             "current_user_login": user.login if user else None,
+            "current_user_store_code": user.store_code if user else None,  # 🔥 추가
         },
     )
 
@@ -250,6 +252,7 @@ async def api_test_form(
             "used_authorization": False,
             "current_user_id": user.id if user else None,
             "current_user_login": user.login if user else None,
+            "current_user_store_code": user.store_code if user else None,  # 🔥 추가
         },
     )
 
@@ -363,10 +366,9 @@ async def api_test_submit(
             "used_authorization": bool(final_token),
             "current_user_id": user.id if user else None,
             "current_user_login": user.login if user else None,
+            "current_user_store_code": user.store_code if user else None,  # 🔥 추가
         },
     )
-
-
 
 
 @router.get("/ws-debug")
@@ -417,6 +419,7 @@ async def stats_by_model_page(
             "error": data.get("error"),
             "current_user_id": user.id if user else None,
             "current_user_login": user.login if user else None,
+            "current_user_store_code": user.store_code if user else None if user else None,  # 🔥 추가
         },
     )
 
@@ -472,6 +475,7 @@ async def stats_by_user_page(
             "error": data.get("error"),
             "current_user_id": user.id if user else None,
             "current_user_login": user.login if user else None,
+            "current_user_store_code": user.store_code if user else None if user else None,  # 🔥 추가
         },
     )
 
@@ -497,6 +501,7 @@ async def fix_test_form(
             "error": None,                # 에러 메시지 있으면 표시
             "current_user_id": user.id if user else None,
             "current_user_login": user.login if user else None,
+            "current_user_store_code": user.store_code if user else None,  # 🔥 추가
         },
     )
 
@@ -549,5 +554,34 @@ async def fix_test_submit(
             "error": error,
             "current_user_id": user.id if user else None,
             "current_user_login": user.login if user else None,
+            "current_user_store_code": user.store_code if user else None if user else None,  # 🔥 추가
         },
     )
+
+
+# =====================================================================
+# NEW: store_code 토글/변경 폼 처리 (/ui/user/store-code)
+# =====================================================================
+
+@router.post("/user/store-code")
+async def update_store_code_ui(
+    request: Request,
+    store_code: bool = Form(...),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    HTML 폼에서 store_code를 받아와 현재 로그인 유저의 설정을 변경.
+    - checkbox이면 "on"/"true"/"1" → True로 파싱됨
+    - 숫자 0/1, true/false 전부 bool로 캐스팅됨
+    """
+    user = await _get_current_user(request, session)
+    if not user:
+        return RedirectResponse(url="/auth/github/login", status_code=303)
+
+    user.store_code = store_code
+    session.add(user)
+    await session.commit()
+
+    # 돌아갈 곳: referer 있으면 거기로, 없으면 리뷰 폼으로
+    referer = request.headers.get("referer") or "/ui/review"
+    return RedirectResponse(url=referer, status_code=303)

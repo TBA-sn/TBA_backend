@@ -8,6 +8,34 @@
   <p style="font-size:14px;margin-bottom:8px;">
     현재 로그인: <b>{{ current_user_login }}</b> (id: {{ current_user_id }})
   </p>
+
+  {# 🔥 원본 코드 저장 설정 토글 #}
+  <div style="font-size:13px;margin-bottom:12px;padding:8px 10px;border:1px solid #ddd;border-radius:4px;">
+    <div style="margin-bottom:6px;">
+      원본 코드 저장 설정:
+      {% if current_user_store_code %}
+        <b style="color:green;">저장함</b>
+      {% else %}
+        <b style="color:#c00;">저장 안 함</b>
+      {% endif %}
+    </div>
+
+    <form method="post" action="/ui/user/store-code" style="display:inline;">
+      {# 현재 값의 반대로 보내서 토글 #}
+      <input
+        type="hidden"
+        name="store_code"
+        value="{% if current_user_store_code %}0{% else %}1{% endif %}"
+      />
+      <button type="submit">
+        {% if current_user_store_code %}
+          원본 코드 저장 끄기
+        {% else %}
+          원본 코드 저장 켜기
+        {% endif %}
+      </button>
+    </form>
+  </div>
 {% endif %}
 
 <form method="post" action="/ui/review">

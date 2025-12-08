@@ -18,6 +18,7 @@ async def save_review_result(
     language: Optional[str],
     llm_result: LLMQualityResponse,
     code_fingerprint: Optional[str] = None,
+    raw_code: Optional[str] = None,
 ) -> Review:
 
     now = datetime.now(timezone.utc)
@@ -38,6 +39,7 @@ async def save_review_result(
         meta_id=meta.id,
         quality_score=float(llm_result.quality_score),
         summary=llm_result.review_summary,
+        code=raw_code,
     )
     session.add(review)
     await session.flush()

@@ -163,6 +163,8 @@ async def create_review_request(
         },
     )
 
+    raw_code_to_store = body.snippet.code if getattr(user, "store_code", False) else None
+
     review: Review = await save_review_result(
         session,
         github_id=str(github_id),
@@ -171,7 +173,9 @@ async def create_review_request(
         language=language,
         llm_result=llm_res,
         code_fingerprint=code_fingerprint,
+        raw_code=raw_code_to_store,
     )
+
 
     meta_row = await session.get(ReviewMeta, review.meta_id)
     if meta_row and not meta_row.github_id:

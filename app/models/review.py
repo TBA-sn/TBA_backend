@@ -46,6 +46,7 @@ class Review(Base):
     )
     quality_score = Column(Float, nullable=False)
     summary = Column(Text, nullable=False)
+    code = Column(Text, nullable=True)
 
     meta = relationship("ReviewMeta", back_populates="reviews")
 
