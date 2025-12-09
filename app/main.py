@@ -15,7 +15,7 @@ from app.routers.llm import router as llm_router
 from app.routers.ws_debug import router as ws_debug_router
 from app.routers.v1.fix import router as fix_router
 from app.routers.auth import router as auth_router
-
+from app.routers import sample_import
 
 app = FastAPI(
     title="Code Review API",
@@ -50,7 +50,7 @@ logging.getLogger("uvicorn.error").info("Auth router enabled.")
 app.include_router(fix_router)
 app.include_router(user_router)
 app.include_router(ui_router)
-
+app.include_router(sample_import.router)
 
 @app.get("/", include_in_schema=False)
 def root():

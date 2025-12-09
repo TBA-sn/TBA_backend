@@ -1,0 +1,80 @@
+{# app/templates/ui/sample_import.html #}
+{% extends "ui/base.html" %}
+{% block title %}샘플 JSON 업로드{% endblock %}
+
+{% block content %}
+<h2>샘플 리뷰 JSON 업로드</h2>
+
+<form method="post" action="" enctype="multipart/form-data"
+      style="margin: 16px 0; display: flex; flex-direction: column; gap: 12px; max-width: 480px;">
+
+  <label style="display: flex; flex-direction: column; gap: 4px;">
+    <span>github_id (모든 샘플에 공통으로 들어갈 값)</span>
+    <input type="text" name="github_id" required placeholder="예: 124683336" />
+  </label>
+
+  <label style="display: flex; flex-direction: column; gap: 4px;">
+    <span>JSON 파일 업로드</span>
+    <input type="file" name="json_file" accept=".json,application/json" required />
+  </label>
+
+  <button type="submit">JSON 읽어서 DB에 넣기</button>
+</form>
+
+{% if inserted is not none %}
+  <div style="margin-top: 12px; padding: 8px; border: 1px solid #4caf50;">
+    ✅ {{ inserted }}개의 샘플을 DB에 인서트했습니다.
+  </div>
+{% endif %}
+
+{% if error %}
+  <div style="margin-top: 12px; padding: 8px; border: 1px solid #f44336; white-space: pre-wrap;">
+    ❌ 에러 발생: {{ error }}
+  </div>
+{% endif %}
+
+<hr style="margin: 16px 0;" />
+
+<h3>기대하는 JSON 구조 예시</h3>
+<p style="font-size: 0.9rem; color: #555;">
+  배열로 여러 개를 보내도 되고, 단일 객체 하나만 보내도 됩니다.
+</p>
+
+<pre style="background:#f7f7f7; padding: 12px; font-size: 0.8rem; overflow-x: auto;">
+[
+  {
+    "meta": {
+      "github_id": "원래 값은 무시됨, UI에서 입력한 걸로 덮어씀",
+      "review_id": 50,
+      "version": "v1",
+      "actor": "server",
+      "language": "plaintext",
+      "trigger": "manual",
+      "code_fingerprint": "7a3b1d813bb5cd243224d23a5034635da47090807908b2e8876a574fe2fc88c1",
+      "model": "deepcogito/cogito-v2.1-671b",
+      "result": {
+        "result_ref": "50",
+        "error_message": null
+      },
+      "audit": "2025-12-03T15:48:11"
+    },
+    "body": {
+      "quality_score": 83,
+      "summary": "The code is a simple function that returns True if a variable is 1...",
+      "scores_by_category": {
+        "bug": 100,
+        "maintainability": 70,
+        "style": 88,
+        "security": 100
+      },
+      "comments": {
+        "bug": "No bugs or logical errors detected...",
+        "maintainability": "The code is simple but hard to maintain...",
+        "style": "Numerous style violations...",
+        "security": "No security issues detected..."
+      }
+    }
+  }
+]
+</pre>
+{% endblock %}
