@@ -45,7 +45,7 @@ class CodeReviewerClient:
             "The JSON MUST STRICTLY adhere to the following structure, including 'quality_score', "
             "'review_summary', 'scores_by_category', and 'review_details'.\n"
             "Example scores_by_category structure: "
-            "{\"bug\": 90, \"maintainability\": 70, \"style\": 60, \"security\": 80}\n\n"
+            "{\"bug\": 93, \"maintainability\": 71, \"style\": 68, \"security\": 86}\n\n"
             f"[CODE]\n{code_snippet}\n[/CODE]\n"
             "[/INST]"
         )
