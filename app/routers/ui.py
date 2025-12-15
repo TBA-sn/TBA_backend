@@ -626,3 +626,129 @@ async def review_delete_all(
     await session.commit()
 
     return RedirectResponse(url="/ui/reviews", status_code=303)
+
+# =====================================================================
+# 유저 전체 삭제
+# =====================================================================
+
+@router.post("/users/delete-all")
+async def users_delete_all(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    # 1) 모든 카테고리 결과 삭제
+    await session.execute(delete(ReviewCategoryResult))
+
+    # 2) 모든 리뷰 삭제
+    await session.execute(delete(Review))
+
+    # 3) 모든 메타 삭제
+    await session.execute(delete(ReviewMeta))
+
+    # 4) 모든 유저 삭제
+    await session.execute(delete(User))
+
+    await session.commit()
+
+    # 🔁 유저 관리 페이지로 돌려보내기
+    return RedirectResponse(url="/ui/users", status_code=303)
+
+
+# =====================================================================
+# 선택 유저 삭제
+# =====================================================================
+
+@router.post("/users/delete-selected")
+async def users_delete_selected(
+    request: Request,
+    user_ids: List[int] = Form(...),
+    session: AsyncSession = Depends(get_session),
+):
+    # 아무것도 안 찍고 보냈으면 그냥 돌아가기
+    if not user_ids:
+        return RedirectResponse(url="/ui/users", status_code=303)
+
+    # 1) 선택된 유저들 조회
+    result_users = await session.execute(
+        select(User).where(User.id.in_(user_ids))
+    )
+    users = result_users.scalars().all()
+
+    if not users:
+        return RedirectResponse(url="/ui/users", status_code=303)
+
+    # 2) 이 유저들의 github_id 목록
+    github_ids = [u.github_id for u in users if u.github_id]
+
+    review_ids: list[int] = []
+    meta_ids: list[int] = []
+
+    if github_ids:
+        # 3) github_id 기준으로 ReviewMeta 찾기
+        result_meta = await session.execute(
+            select(ReviewMeta.id).where(ReviewMeta.github_id.in_(github_ids))
+        )
+        meta_ids = result_meta.scalars().all()
+
+        if meta_ids:
+            # 4) meta_id 기준으로 Review 찾기
+            result_reviews = await session.execute(
+                select(Review.id).where(Review.meta_id.in_(meta_ids))
+            )
+            review_ids = result_reviews.scalars().all()
+
+    # 5) 카테고리 결과 삭제 (review_id 기준)
+    if review_ids:
+        await session.execute(
+            delete(ReviewCategoryResult).where(
+                ReviewCategoryResult.review_id.in_(review_ids)
+            )
+        )
+        await session.execute(
+            delete(Review).where(Review.id.in_(review_ids))
+        )
+
+    # 6) 메타 삭제
+    if meta_ids:
+        await session.execute(
+            delete(ReviewMeta).where(ReviewMeta.id.in_(meta_ids))
+        )
+
+    # 7) 유저 삭제
+    await session.execute(
+        delete(User).where(User.id.in_(user_ids))
+    )
+
+    await session.commit()
+
+    return RedirectResponse(url="/ui/users", status_code=303)
+
+# =====================================================================
+# 유저 관리 페이지 (/ui/users)
+# =====================================================================
+
+@router.get("/users")
+async def users_page(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    # 유저 목록
+    users = (
+        await session.execute(
+            select(User).order_by(User.created_at.desc())
+        )
+    ).scalars().all()
+
+    # 헤더용 현재 로그인 유저 정보
+    current_user = await _get_current_user(request, session)
+
+    return templates.TemplateResponse(
+        "ui/users.html",
+        {
+            "request": request,
+            "users": users,
+            "current_user_id": current_user.id if current_user else None,
+            "current_user_login": current_user.login if current_user else None,
+            "current_user_store_code": current_user.store_code if current_user else None,
+        },
+    )
