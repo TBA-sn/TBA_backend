@@ -89,10 +89,7 @@ class CodeReviewerClient:
         if code_match:
             fixed_code = code_match.group(1)
         else:
-            # 만약 모델이 마크다운 없이 코드만 줬거나, JSON을 줬을 경우 대비
-            # 간단한 휴리스틱: "{" 로 시작하면 실패로 간주하고 원본 반환하거나 에러 처리 가능
             if output_text.strip().startswith("{"):
-                # 최후의 수단: JSON이 나오면 그냥 원본 코드를 반환하거나, 에러 로그 출력
                 print(" Model returned JSON instead of code. Returning original code.")
                 return code_snippet
             fixed_code = output_text.replace("```", "")
