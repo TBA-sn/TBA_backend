@@ -7,12 +7,12 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.utils.database import get_session
-from app.models.review import Review, ReviewMeta
+from app.models.review import Review, ReviewMeta, ReviewCategoryResult
 from app.models.user import User
 from app.routers.auth import get_current_user_id_from_cookie
 from app.schemas.common import Meta as MetaSchema
@@ -603,4 +603,26 @@ async def review_delete(
         await session.commit()
 
     # 삭제 후 목록으로
+    return RedirectResponse(url="/ui/reviews", status_code=303)
+
+# =====================================================================
+# 리뷰 전체 삭제
+# =====================================================================
+
+@router.post("/reviews/delete-all")
+async def review_delete_all(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    # 1) 카테고리 결과 먼저 삭제 (Review를 FK로 물고 있을 수 있으니까)
+    await session.execute(delete(ReviewCategoryResult))
+
+    # 2) 리뷰 삭제
+    await session.execute(delete(Review))
+
+    # 3) 메타도 모두 삭제
+    await session.execute(delete(ReviewMeta))
+
+    await session.commit()
+
     return RedirectResponse(url="/ui/reviews", status_code=303)
