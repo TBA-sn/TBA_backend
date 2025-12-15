@@ -59,58 +59,43 @@ class CodeReviewerClient:
 
     def get_fix(self, code_snippet: str, review_summary: str, review_details: dict) -> str:
         """
-        [기능 2] 최종 합본: 상세 리팩토링 지시 + 주석 보존 + 순수 코드 추출
+        [기능 2] 수정 코드 제안
         """
-        # 1. 문맥 생성
-        review_context = (
-            f"Review Summary: {review_summary}\n"
-            f"Detailed Issues: {review_details}"
-        )
+        review_context = f"Summary: {review_summary}\nDetails: {review_details}"
 
-        # 2. 프롬프트 구성 (상세 지시와 안전 장치 결합)
+        # 여기도 상세한 가이드라인 유지
         user_prompt = (
             "[INST]\n"
-            "You are a strict Python Code Generator. Your ONLY task is to write fixed code.\n"
-            "Refactor the [INPUT CODE] based on [ISSUES].\n\n"
+            "Refactor the code below to be PRODUCTION-READY.\n\n"
+            f"[ORIGINAL CODE]\n{code_snippet}\n\n"
+            f"[REVIEW REPORT TO FIX]\n{review_context}\n\n"
+            "Strictly follow these rules:\n"
+            "1. Fix bugs and security issues mentioned in the report.\n"
             
-            f"[INPUT CODE]\n{code_snippet}\n\n"
-            f"[ISSUES]\n{review_context}\n\n"
+            # [중요] 유지보수성(Radon) 개선을 위한 명시적 지시 포함
+            "2. IMPROVE MAINTAINABILITY: Reduce Cyclomatic Complexity. "
+            "Break down long functions into smaller helper functions. "
+            "Reduce deep nesting (e.g., use guard clauses).\n"
             
-            "--- STRICT RULES ---\n"
-            "1. Output ONLY the valid Python code inside markdown blocks (```python ... ```).\n"
-            "2. Fix bugs and security issues mentioned in the report.\n"
-            
-            # [복구됨] 사용자님이 작성하신 상세 리팩토링 가이드라인
-            "3. IMPROVE MAINTAINABILITY:\n"
-            "   - Reduce Cyclomatic Complexity (break down long functions into helpers).\n"
-            "   - Reduce deep nesting (use guard clauses where possible).\n"
-            "   - Apply PEP 8, Type Hints, and Docstrings.\n"
-            
-            # [유지] 주석 스마트 유지 및 한글 보존 규칙
-            "4. Update existing comments to match the refactored logic.\n"
-            "   CRITICAL: If the original comments are in Korean, KEEP them in Korean. Do not translate them to English.\n"
-            
-            # [유지] 출력 오염 방지 규칙
-            "5. DO NOT write introductions (e.g., 'Here is the code') or explanations.\n"
-            "6. DO NOT output JSON.\n"
-            "[/INST]"
+            "3. Apply PEP 8, Type Hints, and Docstrings.\n"
+            "Output ONLY the code block.\n[/INST]"
         )
         
-        # 3. vLLM 호출
+        # vLLM 호출
         output_text = self._call_vllm(self.FIX_SYS_PROMPT, user_prompt)
         
-        # 4. 후처리 (잡담 제거 및 코드 추출)
+        # 응답 후처리: [/INST] 태그 제거
         if "[/INST]" in output_text:
-            output_text = output_text.split("[/INST]")[-1]
+            output_text = output_text.split("[/INST]")[-1].strip()
             
-        code_match = re.search(r'```(?:python)?\s*(.*?)\s*```', output_text, re.DOTALL)
-        
+        # 마크다운 코드 블록(```python ... ```)만 깔끔하게 추출
+        code_match = re.search(r'```python\s*(.*?)\s*```', output_text, re.DOTALL)
         if code_match:
             fixed_code = code_match.group(1)
         else:
-            fixed_code = output_text.replace("```", "")
-            
-        return fixed_code.strip()
+            fixed_code = output_text.replace("```", "").strip()
+        
+        return fixed_code
 
     def _call_vllm(self, system_msg, user_msg):
         """
