@@ -585,3 +585,22 @@ async def update_store_code_ui(
     # 돌아갈 곳: referer 있으면 거기로, 없으면 리뷰 폼으로
     referer = request.headers.get("referer") or "/ui/review"
     return RedirectResponse(url=referer, status_code=303)
+
+
+# =====================================================================
+# 리뷰 삭제
+# =====================================================================
+
+@router.post("/review/{review_id}/delete")
+async def review_delete(
+    review_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    rec = await session.get(Review, review_id)
+    if rec:
+        await session.delete(rec)
+        await session.commit()
+
+    # 삭제 후 목록으로
+    return RedirectResponse(url="/ui/reviews", status_code=303)

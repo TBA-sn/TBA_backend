@@ -85,6 +85,7 @@ async def sample_import_post(
                 quality_score=body_json.get("quality_score"),
                 summary=body_json.get("summary"),
                 meta_id=review_meta.id,
+                code=body_json.get("code"),
             )
             session.add(review)
             await session.flush()  # review.id 확보

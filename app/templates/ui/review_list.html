@@ -64,7 +64,27 @@
           <span style="color:#888;">코드 없음</span>
         {% endif %}
       </td>
-      <td><a class="button" href="/ui/review/{{ r.id }}">보기</a></td>
+  <td>
+  <div style="display:flex; gap:8px; align-items:center;">
+    <a href="/ui/review/{{ r.id }}" 
+       class="button"
+       style="padding:6px 12px; font-size:14px; line-height:1;">보기</a>
+
+    <form method="post"
+          action="/ui/review/{{ r.id }}/delete"
+          style="margin:0;"
+          onsubmit="return confirm('정말 이 리뷰를 삭제할까요?');">
+      <button type="submit"
+              class="button"
+              style="padding:6px 12px; font-size:14px; line-height:1; cursor:pointer;">
+        삭제
+      </button>
+    </form>
+  </div>
+</td>
+
+
+
     </tr>
   {% else %}
     <tr><td colspan="8" style="text-align:center;">리뷰가 없습니다</td></tr>
