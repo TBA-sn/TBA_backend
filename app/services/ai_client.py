@@ -131,7 +131,7 @@ class CodeReviewerClient:
                     {"role": "user", "content": user_msg}
                 ],
                 max_tokens=2048,
-                temperature=0.0,
+                temperature=0.1,
                 stop=["<|EOT|>", "[/INST]"]
             )
             return response.choices[0].message.content
